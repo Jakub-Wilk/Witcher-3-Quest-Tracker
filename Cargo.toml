@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/quest_db"]
+members = [".", "crates/quest_db", "crates/quest_scraper"]
 resolver = "2"
 
 [package]
