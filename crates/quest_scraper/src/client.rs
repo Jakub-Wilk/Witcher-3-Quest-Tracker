@@ -1,3 +1,4 @@
+use futures::stream::{self, StreamExt};
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
 use serde_json::Value;
 
@@ -84,14 +85,44 @@ impl WikiScraperClient {
     }
 
     /// Batch fetches multiple quest pages into an in-memory `ScrapedQuestStore`.
-    pub async fn fetch_quests_batch(&self, page_titles: &[&str]) -> Result<ScrapedQuestStore> {
-        let mut store = ScrapedQuestStore::default();
-        for &title in page_titles {
-            match self.fetch_quest(title).await {
-                Ok(quest) => store.push(quest),
-                Err(e) => eprintln!("Warning: Failed to scrape quest '{}': {}", title, e),
-            }
-        }
-        Ok(store)
+    /// Pages that fail to fetch or parse are collected in `BatchResult::failed`.
+    pub async fn fetch_quests_batch(&self, page_titles: &[&str]) -> BatchResult {
+        self.fetch_quests_batch_with_progress(page_titles, |_, _| {}).await
     }
+
+    /// Like `fetch_quests_batch`, fetching up to `BATCH_CONCURRENCY` pages at once and calling
+    /// `on_progress(done, total)` after each page completes.
+    pub async fn fetch_quests_batch_with_progress(
+        &self,
+        page_titles: &[&str],
+        mut on_progress: impl FnMut(usize, usize),
+    ) -> BatchResult {
+        let total = page_titles.len();
+        let mut results = stream::iter(page_titles.iter().map(|&title| async move {
+            (title, self.fetch_quest(title).await)
+        }))
+        .buffer_unordered(BATCH_CONCURRENCY);
+
+        let mut batch = BatchResult::default();
+        let mut done = 0;
+        while let Some((title, result)) = results.next().await {
+            match result {
+                Ok(quest) => batch.store.push(quest),
+                Err(e) => batch.failed.push((title.to_string(), e.to_string())),
+            }
+            done += 1;
+            on_progress(done, total);
+        }
+        batch
+    }
+}
+
+/// Maximum number of wiki pages fetched concurrently by batch operations.
+const BATCH_CONCURRENCY: usize = 4;
+
+/// Outcome of a batch fetch: the successfully scraped quests plus `(title, error)` for each failure.
+#[derive(Debug, Default)]
+pub struct BatchResult {
+    pub store: ScrapedQuestStore,
+    pub failed: Vec<(String, String)>,
 }

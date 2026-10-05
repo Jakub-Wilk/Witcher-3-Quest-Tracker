@@ -4,7 +4,7 @@ pub mod mock;
 pub mod models;
 pub mod parser;
 
-pub use client::WikiScraperClient;
+pub use client::{BatchResult, WikiScraperClient};
 pub use error::{Result, ScraperError};
 pub use mock::mock_sample_quests;
 pub use models::{

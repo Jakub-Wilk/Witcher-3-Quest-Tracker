@@ -101,7 +101,9 @@ pub fn list_for_playthrough(
 
     let mut results = Vec::new();
     for row in rows {
-        results.push(row?);
+        let (mut quest, progress) = row?;
+        quest.prerequisite_ids = crate::repository::quests::get_prerequisites(conn, quest.id)?;
+        results.push((quest, progress));
     }
     Ok(results)
 }

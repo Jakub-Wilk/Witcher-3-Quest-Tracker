@@ -8,4 +8,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+chrono = "0.4.45"
+dioxus = { version = "0.7", features = ["desktop"] }
+dirs = "7.0.0"
 quest_db = { path = "crates/quest_db" }
+quest_scraper = { version = "0.1.0", path = "crates/quest_scraper" }
+tracing = "0.1.44"
+tracing-subscriber = "0.3.23"
+
+[dev-dependencies]
+tokio = { version = "1.53.2", features = ["macros", "rt-multi-thread"] }

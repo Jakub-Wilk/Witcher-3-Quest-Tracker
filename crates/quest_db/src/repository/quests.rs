@@ -162,6 +162,78 @@ pub fn delete(conn: &Connection, id: i64) -> Result<()> {
     Ok(())
 }
 
+/// Updates the static metadata of an existing quest (type, region, level, sort order,
+/// description, unmarked flag). Name, source, cutoff and prerequisites are left untouched,
+/// and per-playthrough progress is never affected.
+pub fn update_metadata(conn: &Connection, id: i64, q: &NewQuest) -> Result<()> {
+    let rows_affected = conn.execute(
+        "UPDATE quests SET
+            quest_type = ?2, region = ?3, recommended_level = ?4,
+            sort_order = ?5, description = ?6, is_unmarked = ?7
+         WHERE id = ?1",
+        params![
+            id,
+            q.quest_type,
+            q.region,
+            q.recommended_level,
+            q.sort_order,
+            q.description,
+            q.is_unmarked,
+        ],
+    )?;
+    if rows_affected == 0 {
+        return Err(QuestTrackerError::QuestNotFound(id));
+    }
+    Ok(())
+}
+
+/// Sets (or clears) the cutoff quest of a quest.
+pub fn set_cutoff(conn: &Connection, id: i64, cutoff_quest_id: Option<i64>) -> Result<()> {
+    let rows_affected = conn.execute(
+        "UPDATE quests SET cutoff_quest_id = ?2 WHERE id = ?1",
+        params![id, cutoff_quest_id],
+    )?;
+    if rows_affected == 0 {
+        return Err(QuestTrackerError::QuestNotFound(id));
+    }
+    Ok(())
+}
+
+/// Replaces the full set of prerequisites for a quest.
+pub fn set_prerequisites(conn: &Connection, quest_id: i64, prerequisite_ids: &[i64]) -> Result<()> {
+    conn.execute(
+        "DELETE FROM quest_prerequisites WHERE quest_id = ?1",
+        params![quest_id],
+    )?;
+    for &prereq_id in prerequisite_ids {
+        add_prerequisite(conn, quest_id, prereq_id)?;
+    }
+    Ok(())
+}
+
+/// Finds a quest by name regardless of source, preferring a match in `preferred` source.
+/// Returns `None` if no quest has that name.
+pub fn find_by_name(conn: &Connection, name: &str, preferred: QuestSource) -> Result<Option<Quest>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, source, quest_type, region, recommended_level,
+                sort_order, description, is_unmarked, cutoff_quest_id,
+                created_at, updated_at
+         FROM quests
+         WHERE name = ?1 COLLATE NOCASE
+         ORDER BY (source = ?2) DESC, id ASC
+         LIMIT 1",
+    )?;
+
+    let quest = stmt.query_row(params![name, preferred], map_row).optional()?;
+    match quest {
+        Some(mut q) => {
+            q.prerequisite_ids = get_prerequisites(conn, q.id)?;
+            Ok(Some(q))
+        }
+        None => Ok(None),
+    }
+}
+
 fn map_row(row: &rusqlite::Row) -> rusqlite::Result<Quest> {
     let created_at_str: String = row.get(10)?;
     let updated_at_str: String = row.get(11)?;
@@ -288,5 +360,69 @@ mod tests {
 
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].id, q3_id);
+    }
+
+    fn sample(name: &str, source: QuestSource) -> NewQuest {
+        NewQuest {
+            name: name.into(),
+            source,
+            quest_type: QuestType::SecondaryQuest,
+            region: Region::Velen,
+            recommended_level: Some(5),
+            sort_order: Some(1),
+            description: None,
+            is_unmarked: false,
+            cutoff_quest_id: None,
+            prerequisite_ids: vec![],
+        }
+    }
+
+    #[test]
+    fn test_update_metadata_cutoff_and_prerequisites() {
+        let conn = open_in_memory().unwrap();
+        let a = insert(&conn, &sample("A", QuestSource::BaseGame)).unwrap();
+        let b = insert(&conn, &sample("B", QuestSource::BaseGame)).unwrap();
+        let c = insert(&conn, &sample("C", QuestSource::BaseGame)).unwrap();
+
+        let mut changed = sample("A", QuestSource::BaseGame);
+        changed.region = Region::Skellige;
+        changed.recommended_level = Some(20);
+        changed.description = Some("Updated".into());
+        update_metadata(&conn, a, &changed).unwrap();
+
+        set_cutoff(&conn, a, Some(b)).unwrap();
+        set_prerequisites(&conn, a, &[b, c]).unwrap();
+        set_prerequisites(&conn, a, &[c]).unwrap();
+
+        let q = get(&conn, a).unwrap();
+        assert_eq!(q.region, Region::Skellige);
+        assert_eq!(q.recommended_level, Some(20));
+        assert_eq!(q.description.as_deref(), Some("Updated"));
+        assert_eq!(q.cutoff_quest_id, Some(b));
+        assert_eq!(q.prerequisite_ids, vec![c]);
+
+        set_cutoff(&conn, a, None).unwrap();
+        assert_eq!(get(&conn, a).unwrap().cutoff_quest_id, None);
+
+        assert!(matches!(
+            update_metadata(&conn, 999, &changed),
+            Err(QuestTrackerError::QuestNotFound(999))
+        ));
+    }
+
+    #[test]
+    fn test_find_by_name_prefers_source_and_falls_back() {
+        let conn = open_in_memory().unwrap();
+        let base = insert(&conn, &sample("Shared", QuestSource::BaseGame)).unwrap();
+        let hos = insert(&conn, &sample("Shared", QuestSource::HeartsOfStone)).unwrap();
+        let only_base = insert(&conn, &sample("Only Base", QuestSource::BaseGame)).unwrap();
+
+        let found = find_by_name(&conn, "Shared", QuestSource::HeartsOfStone).unwrap().unwrap();
+        assert_eq!(found.id, hos);
+        let found = find_by_name(&conn, "Shared", QuestSource::BaseGame).unwrap().unwrap();
+        assert_eq!(found.id, base);
+        let found = find_by_name(&conn, "only base", QuestSource::BloodAndWine).unwrap().unwrap();
+        assert_eq!(found.id, only_base);
+        assert!(find_by_name(&conn, "Missing", QuestSource::BaseGame).unwrap().is_none());
     }
 }
