@@ -1,6 +1,11 @@
+[workspace]
+members = [".", "crates/quest_db"]
+resolver = "2"
+
 [package]
 name = "witcher_3_quest_tracker"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
+quest_db = { path = "crates/quest_db" }
