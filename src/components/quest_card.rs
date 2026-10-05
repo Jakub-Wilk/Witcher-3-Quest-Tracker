@@ -1,17 +1,13 @@
 use dioxus::prelude::*;
 use quest_db::{Quest, QuestProgress, QuestStatus};
 
-use super::{region_label, source_label, type_label};
+use super::{region_label, source_label, type_label, wiki_url};
 use crate::state::AppState;
 
-/// One quest: completion checkbox, metadata, "Mark Failed" and a notes drawer.
+/// One quest: completion checkbox, metadata, missable warning, "Mark Failed", wiki link and a
+/// drawer with the journal description and notes.
 #[component]
-pub fn QuestCard(
-    quest: Quest,
-    progress: QuestProgress,
-    cutoff_name: Option<String>,
-    prereq_names: Vec<String>,
-) -> Element {
+pub fn QuestCard(quest: Quest, progress: QuestProgress, cutoff_name: Option<String>) -> Element {
     let mut state = use_context::<AppState>();
     let mut notes_open = use_signal(|| false);
     let mut draft = use_signal(|| progress.notes.clone().unwrap_or_default());
@@ -22,6 +18,7 @@ pub fn QuestCard(
     let failed = status == QuestStatus::Failed;
     let has_notes = progress.notes.is_some();
     let saved_notes = progress.notes.clone().unwrap_or_default();
+    let url = wiki_url(&quest.wiki_title);
 
     let card_class = match status {
         QuestStatus::Completed => "card quest-card completed",
@@ -45,8 +42,11 @@ pub fn QuestCard(
                 }
                 div { class: "quest-main",
                     div { class: "quest-name",
-                        "{quest.name}"
+                        "{quest.display_name()}"
                         if quest.is_unmarked { span { class: "badge badge-muted", "Unmarked" } }
+                    }
+                    if quest.localized_name.is_some() {
+                        div { class: "quest-original-name", "{quest.name}" }
                     }
                     div { class: "quest-meta",
                         span { "{region_label(quest.region)}" }
@@ -56,13 +56,13 @@ pub fn QuestCard(
                         span { "{type_label(quest.quest_type)}" }
                         span { class: "badge badge-source", "{source_label(quest.source)}" }
                     }
-                    if let Some(cutoff) = &cutoff_name {
-                        if !completed && !failed {
+                    if !completed && !failed {
+                        if let Some(cutoff) = &cutoff_name {
                             div { class: "quest-warning", "⚠ Cutoff: {cutoff}" }
                         }
-                    }
-                    if !prereq_names.is_empty() {
-                        div { class: "quest-prereqs", "🔗 Requires: {prereq_names.join(\", \")}" }
+                        if let Some(notes) = &quest.important_notes {
+                            div { class: "quest-important", title: "{notes}", "❗ {notes}" }
+                        }
                     }
                 }
                 div { class: "quest-actions",
@@ -82,8 +82,18 @@ pub fn QuestCard(
                         }
                     }
                     button {
+                        class: "btn btn-icon",
+                        title: "Open on the Witcher wiki",
+                        onclick: move |_| {
+                            if let Err(e) = open::that(&url) {
+                                state.error.set(Some(format!("Could not open the browser: {e}")));
+                            }
+                        },
+                        "Wiki ↗"
+                    }
+                    button {
                         class: if has_notes { "btn btn-note has-notes" } else { "btn btn-note" },
-                        title: "Notes",
+                        title: "Details and notes",
                         onclick: move |_| notes_open.toggle(),
                         "📝"
                     }

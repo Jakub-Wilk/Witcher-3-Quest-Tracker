@@ -1,6 +1,8 @@
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension};
 
+use super::quests::all_prerequisites;
+use super::util::{QUEST_COLUMNS, QUEST_COLUMN_COUNT, map_quest, parse_optional_timestamp, parse_timestamp};
 use crate::error::{QuestTrackerError, Result};
 use crate::models::{
     CompletionSummary, NewQuestProgress, ProgressFilter, Quest, QuestProgress,
@@ -55,15 +57,13 @@ pub fn list_for_playthrough(
     playthrough_id: i64,
     filter: &ProgressFilter,
 ) -> Result<Vec<(Quest, QuestProgress)>> {
-    let mut query = String::from(
-        "SELECT q.id, q.name, q.source, q.quest_type, q.region, q.recommended_level,
-                q.sort_order, q.description, q.is_unmarked, q.cutoff_quest_id,
-                q.created_at, q.updated_at,
-                qp.id, qp.playthrough_id, qp.quest_id, COALESCE(qp.status, 'NotStarted'),
+    let mut query = format!(
+        "SELECT {QUEST_COLUMNS},
+                qp.id, COALESCE(qp.status, 'NotStarted'),
                 qp.notes, qp.started_at, qp.completed_at, qp.created_at, qp.updated_at
          FROM quests q
          LEFT JOIN quest_progress qp ON q.id = qp.quest_id AND qp.playthrough_id = ?1
-         WHERE 1=1",
+         WHERE 1=1"
     );
 
     let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(playthrough_id)];
@@ -93,17 +93,17 @@ pub fn list_for_playthrough(
     let mut stmt = conn.prepare(&query)?;
     let params_slice: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
 
-    let rows = stmt.query_map(params_slice.as_slice(), |row| {
-        let quest = map_quest_part(row)?;
-        let progress = map_progress_part(row, playthrough_id, quest.id)?;
-        Ok((quest, progress))
-    })?;
+    let mut results = stmt
+        .query_map(params_slice.as_slice(), |row| {
+            let quest = map_quest(row)?;
+            let progress = map_progress_part(row, playthrough_id, quest.id)?;
+            Ok((quest, progress))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
 
-    let mut results = Vec::new();
-    for row in rows {
-        let (mut quest, progress) = row?;
-        quest.prerequisite_ids = crate::repository::quests::get_prerequisites(conn, quest.id)?;
-        results.push((quest, progress));
+    let mut prereqs = all_prerequisites(conn)?;
+    for (quest, _) in &mut results {
+        quest.prerequisite_ids = prereqs.remove(&quest.id).unwrap_or_default();
     }
     Ok(results)
 }
@@ -157,10 +157,10 @@ pub fn completion_summary(conn: &Connection, playthrough_id: i64) -> Result<Comp
     let mut stmt = conn.prepare(
         "SELECT
             COUNT(q.id) AS total_quests,
-            SUM(CASE WHEN COALESCE(qp.status, 'NotStarted') = 'NotStarted' THEN 1 ELSE 0 END) AS not_started,
-            SUM(CASE WHEN qp.status = 'InProgress' THEN 1 ELSE 0 END) AS in_progress,
-            SUM(CASE WHEN qp.status = 'Completed' THEN 1 ELSE 0 END) AS completed,
-            SUM(CASE WHEN qp.status = 'Failed' THEN 1 ELSE 0 END) AS failed
+            COALESCE(SUM(CASE WHEN COALESCE(qp.status, 'NotStarted') = 'NotStarted' THEN 1 ELSE 0 END), 0) AS not_started,
+            COALESCE(SUM(CASE WHEN qp.status = 'InProgress' THEN 1 ELSE 0 END), 0) AS in_progress,
+            COALESCE(SUM(CASE WHEN qp.status = 'Completed' THEN 1 ELSE 0 END), 0) AS completed,
+            COALESCE(SUM(CASE WHEN qp.status = 'Failed' THEN 1 ELSE 0 END), 0) AS failed
          FROM quests q
          LEFT JOIN quest_progress qp ON q.id = qp.quest_id AND qp.playthrough_id = ?1",
     )?;
@@ -178,14 +178,8 @@ pub fn completion_summary(conn: &Connection, playthrough_id: i64) -> Result<Comp
 }
 
 fn map_progress_row(row: &rusqlite::Row) -> rusqlite::Result<QuestProgress> {
-    let created_at_str: String = row.get(7)?;
-    let updated_at_str: String = row.get(8)?;
-
-    let created_at = parse_timestamp(&created_at_str, "created_at")?;
-    let updated_at = parse_timestamp(&updated_at_str, "updated_at")?;
-
-    let started_at: Option<String> = row.get(5)?;
-    let completed_at: Option<String> = row.get(6)?;
+    let created_at: String = row.get(7)?;
+    let updated_at: String = row.get(8)?;
 
     Ok(QuestProgress {
         id: row.get(0)?,
@@ -193,112 +187,60 @@ fn map_progress_row(row: &rusqlite::Row) -> rusqlite::Result<QuestProgress> {
         quest_id: row.get(2)?,
         status: row.get(3)?,
         notes: row.get(4)?,
-        started_at: started_at
-            .as_deref()
-            .map(|s| parse_timestamp(s, "started_at"))
-            .transpose()?,
-        completed_at: completed_at
-            .as_deref()
-            .map(|s| parse_timestamp(s, "completed_at"))
-            .transpose()?,
-        created_at,
-        updated_at,
+        started_at: parse_optional_timestamp(row.get(5)?, "started_at")?,
+        completed_at: parse_optional_timestamp(row.get(6)?, "completed_at")?,
+        created_at: parse_timestamp(&created_at, "created_at")?,
+        updated_at: parse_timestamp(&updated_at, "updated_at")?,
     })
 }
 
-fn map_quest_part(row: &rusqlite::Row) -> rusqlite::Result<Quest> {
-    let created_at_str: String = row.get(10)?;
-    let updated_at_str: String = row.get(11)?;
-
-    Ok(Quest {
-        id: row.get(0)?,
-        name: row.get(1)?,
-        source: row.get(2)?,
-        quest_type: row.get(3)?,
-        region: row.get(4)?,
-        recommended_level: row.get(5)?,
-        sort_order: row.get(6)?,
-        description: row.get(7)?,
-        is_unmarked: row.get(8)?,
-        cutoff_quest_id: row.get(9)?,
-        prerequisite_ids: Vec::new(),
-        created_at: parse_timestamp(&created_at_str, "created_at")?,
-        updated_at: parse_timestamp(&updated_at_str, "updated_at")?,
-    })
-}
-
+/// Maps the progress columns that follow the quest columns in `list_for_playthrough`.
+/// Quests without a progress row get a synthetic `NotStarted` entry with id 0.
 fn map_progress_part(
     row: &rusqlite::Row,
     playthrough_id: i64,
     quest_id: i64,
 ) -> rusqlite::Result<QuestProgress> {
-    let progress_id: Option<i64> = row.get(12)?;
-
-    let status: QuestStatus = row.get(15)?;
-    let notes: Option<String> = row.get(16)?;
-    let started_at_str: Option<String> = row.get(17)?;
-    let completed_at_str: Option<String> = row.get(18)?;
-
-    let created_at_str: Option<String> = row.get(19)?;
-    let updated_at_str: Option<String> = row.get(20)?;
-
+    let base = QUEST_COLUMN_COUNT;
+    let progress_id: Option<i64> = row.get(base)?;
     let now = Utc::now();
-    let created_at = created_at_str
-        .as_deref()
-        .map(|s| parse_timestamp(s, "created_at"))
-        .transpose()?
-        .unwrap_or(now);
-
-    let updated_at = updated_at_str
-        .as_deref()
-        .map(|s| parse_timestamp(s, "updated_at"))
-        .transpose()?
-        .unwrap_or(now);
 
     Ok(QuestProgress {
         id: progress_id.unwrap_or(0),
         playthrough_id,
         quest_id,
-        status,
-        notes,
-        started_at: started_at_str
-            .as_deref()
-            .map(|s| parse_timestamp(s, "started_at"))
-            .transpose()?,
-        completed_at: completed_at_str
-            .as_deref()
-            .map(|s| parse_timestamp(s, "completed_at"))
-            .transpose()?,
-        created_at,
-        updated_at,
+        status: row.get(base + 1)?,
+        notes: row.get(base + 2)?,
+        started_at: parse_optional_timestamp(row.get(base + 3)?, "started_at")?,
+        completed_at: parse_optional_timestamp(row.get(base + 4)?, "completed_at")?,
+        created_at: parse_optional_timestamp(row.get(base + 5)?, "created_at")?.unwrap_or(now),
+        updated_at: parse_optional_timestamp(row.get(base + 6)?, "updated_at")?.unwrap_or(now),
     })
-}
-
-fn parse_timestamp(s: &str, field_name: &str) -> rusqlite::Result<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(s)
-        .map(|dt| dt.with_timezone(&Utc))
-        .or_else(|_| {
-            chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%SZ")
-                .map(|ndt| DateTime::<Utc>::from_naive_utc_and_offset(ndt, Utc))
-        })
-        .map_err(|e| {
-            rusqlite::Error::FromSqlConversionFailure(
-                0,
-                rusqlite::types::Type::Text,
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Failed to parse timestamp for {field_name}: '{s}': {e}"),
-                )),
-            )
-        })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::db::open_in_memory;
-    use crate::models::{Difficulty, NewPlaythrough, NewQuest, QuestSource, QuestType, Region};
+    use crate::models::{Difficulty, NewPlaythrough};
     use crate::repository::{playthroughs, quests};
+
+    #[test]
+    fn test_summary_with_no_quests_is_all_zero() {
+        // SUM over zero rows is NULL in SQL; a fresh DB (no sync yet) must still work.
+        let conn = open_in_memory().unwrap();
+        let pt_id = playthroughs::insert(
+            &conn,
+            &NewPlaythrough {
+                name: "Fresh".into(),
+                difficulty: Difficulty::DeathMarch,
+                is_new_game_plus: false,
+                notes: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(completion_summary(&conn, pt_id).unwrap(), CompletionSummary::default());
+    }
 
     #[test]
     fn test_progress_tracking_and_summary() {
@@ -315,39 +257,9 @@ mod tests {
         )
         .unwrap();
 
-        let q1_id = quests::insert(
-            &conn,
-            &NewQuest {
-                name: "Lilac and Gooseberries".into(),
-                source: QuestSource::BaseGame,
-                quest_type: QuestType::MainQuest,
-                region: Region::WhiteOrchard,
-                recommended_level: Some(1),
-                sort_order: Some(1),
-                description: None,
-                is_unmarked: false,
-                cutoff_quest_id: None,
-                prerequisite_ids: vec![],
-            },
-        )
-        .unwrap();
+        let q1_id = quests::insert(&conn, &quests::tests::sample("Lilac and Gooseberries", 1)).unwrap();
 
-        let q2_id = quests::insert(
-            &conn,
-            &NewQuest {
-                name: "Devil by the Well".into(),
-                source: QuestSource::BaseGame,
-                quest_type: QuestType::WitcherContract,
-                region: Region::WhiteOrchard,
-                recommended_level: Some(2),
-                sort_order: Some(2),
-                description: None,
-                is_unmarked: false,
-                cutoff_quest_id: None,
-                prerequisite_ids: vec![],
-            },
-        )
-        .unwrap();
+        let q2_id = quests::insert(&conn, &quests::tests::sample("Devil by the Well", 2)).unwrap();
 
         // Initial summary check
         let summary1 = completion_summary(&conn, pt_id).unwrap();

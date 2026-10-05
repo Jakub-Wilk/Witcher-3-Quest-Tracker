@@ -35,10 +35,11 @@ pub enum Region {
     WhiteOrchard,
     Velen,
     Novigrad,
+    Oxenfurt,
     Skellige,
     KaerMorhen,
+    Vizima,
     Toussaint,
-    OxenFurtSewers,
     Unknown,
 }
 
@@ -102,10 +103,11 @@ impl_sql_enum!(Region {
     WhiteOrchard => "WhiteOrchard",
     Velen => "Velen",
     Novigrad => "Novigrad",
+    Oxenfurt => "Oxenfurt",
     Skellige => "Skellige",
     KaerMorhen => "KaerMorhen",
+    Vizima => "Vizima",
     Toussaint => "Toussaint",
-    OxenFurtSewers => "OxenFurtSewers",
     Unknown => "Unknown",
 });
 
@@ -150,13 +152,20 @@ pub struct PlaythroughUpdate {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Quest {
     pub id: i64,
+    /// MediaWiki page id — the stable identity used by sync.
+    pub wiki_page_id: i64,
+    pub wiki_title: String,
     pub name: String,
+    /// Title in the language chosen at the last sync, when that is not English.
+    pub localized_name: Option<String>,
     pub source: QuestSource,
     pub quest_type: QuestType,
     pub region: Region,
     pub recommended_level: Option<i32>,
     pub sort_order: Option<i32>,
     pub description: Option<String>,
+    /// Missable-quest warnings, newline separated.
+    pub important_notes: Option<String>,
     pub is_unmarked: bool,
     pub cutoff_quest_id: Option<i64>,
     pub prerequisite_ids: Vec<i64>,
@@ -164,16 +173,27 @@ pub struct Quest {
     pub updated_at: DateTime<Utc>,
 }
 
-/// DTO for creating a new quest reference entry.
+impl Quest {
+    /// The localized title if one was synced, otherwise the English name.
+    pub fn display_name(&self) -> &str {
+        self.localized_name.as_deref().unwrap_or(&self.name)
+    }
+}
+
+/// DTO for creating or updating a quest reference entry.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewQuest {
+    pub wiki_page_id: i64,
+    pub wiki_title: String,
     pub name: String,
+    pub localized_name: Option<String>,
     pub source: QuestSource,
     pub quest_type: QuestType,
     pub region: Region,
     pub recommended_level: Option<i32>,
     pub sort_order: Option<i32>,
     pub description: Option<String>,
+    pub important_notes: Option<String>,
     pub is_unmarked: bool,
     pub cutoff_quest_id: Option<i64>,
     pub prerequisite_ids: Vec<i64>,

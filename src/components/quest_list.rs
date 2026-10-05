@@ -2,23 +2,26 @@ use std::collections::HashMap;
 
 use dioxus::prelude::*;
 use quest_db::QuestStatus;
+use quest_scraper::{Language, ScrapeProgress};
 
-use super::{NewPlaythroughModal, QuestCard};
+use super::{PlaythroughModal, QuestCard};
 use crate::state::{AppState, SyncStatus};
 use crate::sync_service::{fetch_remote, merge};
 
-/// Center panel: search, sync, and the filtered list of quest cards.
+/// Center panel: search, sync (with title language), and the filtered list of quest cards.
 #[component]
 pub fn QuestList() -> Element {
     let mut state = use_context::<AppState>();
     let mut show_modal = use_signal(|| false);
-    let filter = state.filter.read().clone();
+    let view = state.view.read().clone();
     let sync = state.sync.read().clone();
+    let syncing = matches!(sync, SyncStatus::Running(_));
+    let language = *state.language.read();
     let current = *state.current.read();
     let rows = state.rows.read();
 
-    let names: HashMap<i64, &str> = rows.iter().map(|(q, _)| (q.id, q.name.as_str())).collect();
-    let visible: Vec<_> = rows.iter().filter(|(q, _)| filter.matches(q)).collect();
+    let names: HashMap<i64, &str> = rows.iter().map(|(q, _)| (q.id, q.display_name())).collect();
+    let visible = view.apply(&rows);
     let visible_done = visible.iter().filter(|(_, p)| p.status == QuestStatus::Completed).count();
     let visible_pct = if visible.is_empty() {
         0.0
@@ -33,16 +36,29 @@ pub fn QuestList() -> Element {
                     class: "input search",
                     r#type: "search",
                     placeholder: "Search quests…",
-                    value: "{filter.search}",
-                    oninput: move |e| state.filter.write().search = e.value(),
+                    value: "{view.search}",
+                    oninput: move |e| state.view.write().search = e.value(),
+                }
+                select {
+                    class: "select",
+                    title: "Language of quest titles (applied on sync)",
+                    disabled: syncing,
+                    onchange: move |e| {
+                        if let Ok(lang) = e.value().parse::<Language>() {
+                            state.language.set(lang);
+                        }
+                    },
+                    for lang in Language::ALL {
+                        option { value: "{lang}", selected: lang == language, "{lang.native_label()}" }
+                    }
                 }
                 button {
                     class: "btn btn-primary",
-                    disabled: matches!(sync, SyncStatus::Running { .. }),
+                    disabled: syncing,
                     onclick: move |_| {
-                        spawn(run_sync(state));
+                        spawn(run_sync(state, language));
                     },
-                    if let SyncStatus::Running { .. } = sync {
+                    if syncing {
                         span { class: "spinner" }
                         "Syncing…"
                     } else {
@@ -51,11 +67,8 @@ pub fn QuestList() -> Element {
                 }
             }
             match &sync {
-                SyncStatus::Running { done, total } if *total > 0 => rsx! {
-                    div { class: "sync-status", "Fetching quest pages: {done}/{total}" }
-                },
-                SyncStatus::Running { .. } => rsx! {
-                    div { class: "sync-status", "Listing wiki categories…" }
+                SyncStatus::Running(progress) => rsx! {
+                    div { class: "sync-status", {progress_text(*progress)} }
                 },
                 SyncStatus::Done(msg) => rsx! {
                     div { class: "sync-status sync-ok", "{msg}" }
@@ -87,7 +100,6 @@ pub fn QuestList() -> Element {
                             quest: quest.clone(),
                             progress: progress.clone(),
                             cutoff_name: quest.cutoff_quest_id.and_then(|id| names.get(&id)).map(|n| n.to_string()),
-                            prereq_names: quest.prerequisite_ids.iter().filter_map(|id| names.get(id)).map(|n| n.to_string()).collect::<Vec<_>>(),
                         }
                     }
                 }
@@ -99,47 +111,46 @@ pub fn QuestList() -> Element {
             }
         }
         if show_modal() {
-            NewPlaythroughModal { on_close: move |_| show_modal.set(false) }
+            PlaythroughModal { on_close: move |_| show_modal.set(false) }
         }
     }
 }
 
-/// Scrapes the wiki, then merges into the DB. The DB is untouched if scraping fails.
-async fn run_sync(mut state: AppState) {
-    let mut sync = state.sync;
-    sync.set(SyncStatus::Running { done: 0, total: 0 });
+fn progress_text(progress: ScrapeProgress) -> String {
+    match progress {
+        ScrapeProgress::ListingCategories => "Listing wiki categories…".into(),
+        ScrapeProgress::FetchingPages { done, total } => format!("Fetching quest pages: {done}/{total}"),
+        ScrapeProgress::Translating { done, total } => format!("Fetching translated titles: {done}/{total}"),
+    }
+}
 
-    let remote = match fetch_remote(move |done, total| sync.set(SyncStatus::Running { done, total })).await {
-        Ok(remote) => remote,
+/// Scrapes the wiki, then merges into the DB. The DB is untouched if scraping fails.
+async fn run_sync(mut state: AppState, language: Language) {
+    let mut sync = state.sync;
+    sync.set(SyncStatus::Running(ScrapeProgress::ListingCategories));
+
+    let scrape = match fetch_remote(language, move |p| sync.set(SyncStatus::Running(p))).await {
+        Ok(scrape) => scrape,
         Err(e) => {
             tracing::error!("Sync failed: {e}");
             sync.set(SyncStatus::Failed(e));
             return;
         }
     };
-    for (title, err) in &remote.failed {
-        tracing::warn!("Failed to scrape '{title}': {err}");
+    for (title, reason) in &scrape.skipped {
+        tracing::info!("Skipped '{title}': {reason}");
     }
 
     let merged = {
         let mut conn = state.db.write();
-        merge(&mut conn, &remote.store)
+        merge(&mut conn, &scrape)
     };
     match merged {
         Ok(report) => {
-            for name in &report.unresolved {
-                tracing::debug!("Unresolved quest link: {name}");
+            for title in &report.unresolved {
+                tracing::debug!("Unresolved quest link: {title}");
             }
-            let mut msg = format!(
-                "Synced {} quests ({} new, {} updated).",
-                report.inserted + report.updated,
-                report.inserted,
-                report.updated
-            );
-            if !remote.failed.is_empty() {
-                msg.push_str(&format!(" {} pages failed to load.", remote.failed.len()));
-            }
-            sync.set(SyncStatus::Done(msg));
+            sync.set(SyncStatus::Done(report.summary()));
             state.reload();
         }
         Err(e) => sync.set(SyncStatus::Failed(e.to_string())),

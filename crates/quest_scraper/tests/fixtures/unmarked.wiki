@@ -1,0 +1,58 @@
+{{Infobox Quest3
+|type = unmarked
+|name = Deadly Crossing
+|image = Tw3 deadly crossing.jpg
+|region = [[Crow's Perch (region)|Crow's Perch]]<br/>[[The Mire]]<br/>[[The Descent]]<br/>[[Crookback Bog]]
+|location = [[Troll Bridge]]<br/>[[Boatmakers' Hut]]<br/>North of [[Lindenvale]]<br/>West of [[Dragonslayer's Grotto]]
+|enemies = Bandits
+|starting_icon = velen
+|location_map = <gallery>
+Tw3 map the mire 01.png|Group 1
+Tw3 map grayrocks 03.png|Group 2
+Tw3 map crookback bog 01.png|Group 3
+</gallery>}}
+'''Deadly Crossing''' is the official name for three minor unmarked [[The Witcher 3 secondary quests|secondary quests]] in {{Tw3}}. However, a fourth has been added to this list as it has the same setup as the rest.
+
+At the bridges and river crossings of war-torn [[Velen]], expect to encounter groups of ne'er-do-wells. They can be hostile, so use diplomatic conversation choices, avoid them, or engage them.
+
+== First deadly crossing ==
+At [[Troll Bridge]] you encounter a group of bandits ordering a toll to be paid and you can do the following: 
+* Pay the bandit 50 {{Crown}} (earns 5 {{Xp}})
+* Use [[Axii]] (Requires Delusion level 1, earns 30{{Xp}})
+* Fight and kill them (will have to use the wheel on the bridge to manually lower it)
+
+== Second deadly crossing ==
+{{Condition|Note}} In order to trigger this encounter you have to visit the bridge at least once with the Nilfgaardians alive and then return later to find them dead and the encounter active.
+
+Several looters are sifting through the corpses of the fallen Black Ones at the long wooden bridge north of [[Lindenvale]]. They've found a relic sword they want to sell. You can:
+* Buy the weapon ([[Mourner]]) for 525 {{Crown}} (earns 52 {{Xp}})
+* Refuse, and be on your way
+* Refuse, kill them, and take the sword for free
+
+Note that if you approach with a weapon drawn, they'll automatically become hostile.
+
+{{Condition|Note}} Prior to {{Patch|game=3|patch=4.0}}, you could also buy the sword, kill the looters and get another sword (with its varying stats rolled separately) off one of the bodies. Be aware that the money will be gone and can't be looted back, although simply selling one of the swords will likely more than cover the cost. With Patch 4.0 though, this option has since been removed.
+
+== Third deadly crossing ==
+Find them west of [[Dragonslayer's Grotto]], in the woods at a junction between roads. Unlike the rest, there's no way to interact with them as they're openly hostile if you get too close.
+
+{{Condition|Note}} This group is connected to the one at [[Troll Bridge]] and the enemies won't appear if you've done the First deadly crossing more than a few days past (tested with a week). The dead peasants' bodies will always be there the first time you visit the place, but the bandits won't be around.
+
+== Fourth deadly crossing ==
+''This one is not part of the official list. See [[Highwayman's Cache]] for more details.''
+
+At the bridge east of the [[Boatmakers' Hut]] are 3 bandits demanding a toll. They can be hostile or told to back down. If they back down, they'll make their way up the road to the Boatmaker's Hut and stand around there.
+* Fight them by saying they'll have to take the coin off you
+* Point out your medallion and be allowed to pass through
+Afterwards, you can use your [[Witcher Senses]] at their campfire to follow some footprints to a partly-hidden chest in the weeds under the bridge. Pry it open for some coin and a couple of diagrams.
+
+== Journal entry ==
+:''This quest has no journal entry.''
+
+== Objectives ==
+:''This quest has no journal objectives.''
+
+{{Tw3 side quests navbox}}
+[[pl:Śmiertelna przeprawa]]
+[[tr:Ölümcül Geçiş]]
+[[Category:The Witcher 3 secondary quests]]

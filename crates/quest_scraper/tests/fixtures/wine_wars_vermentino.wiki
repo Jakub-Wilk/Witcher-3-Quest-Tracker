@@ -1,0 +1,66 @@
+{{Infobox Quest3
+|starting_icon = toussaint
+|type = secondary baw
+|name =Wine Wars: Vermentino
+|image =Tw3 wine wars vermentino.jpg 
+|region = [[Sansretour Valley]]<br/>[[Gorgon Foothills]]
+|location = [[Dantan Glade]]<br/>[[Herbalist's Hut (Gorgon Foothills)|Herbalist's Hut]]<br/>[[Pavone Slope]]<br/>[[Vermentino Vineyard]]
+|reward = 100 {{xp}} / 525 {{Crown}}
+|previous = [[Wine Wars: Belgaard]]
+|next = [[Wine Wars: Belgaard]] {{Small|dependent}}<br/>[[Wine Wars: The Deus in the Machina]] {{Small|dependent}}<br/>[[Wine Wars: Consorting]] {{Small|dependent}}<br/>[[Don't Take Candy from a Stranger]] {{Small|optional}}
+|enemies = [[Rotfiend]]s<br/>[[Archespore]]s<br/>Bandits
+|level = 37}}
+'''Wine Wars: Vermentino''' is a [[Blood and Wine quests|secondary quest]] in the {{BaW}}.
+
+{{Condition|Note}} Even though this quest starts in competition with [[Wine Wars: Coronata]], this does not make the two mutually exclusive, and they can be turned in separately, simultaneously, or even merged into [[Wine Wars: Consorting]].
+
+== Walkthrough ==
+This quest is given if [[Geralt of Rivia|Geralt]] agrees to help out [[Matilda de Vermentino|Matilda]] right after the first part of [[Wine Wars: Belgaard]], where he sees Matilda and her competitor, [[Liam de Coronata|Liam]], arguing over who gets [[Belgaard Vineyard|Belgaard]]. After agreeing to help Matilda, you're given 5 tasks to complete.
+
+Guarded treasure northeast of [[Sansretour Valley]] signpost
+: Once you take out the two [[archespore]]s here, examine the bodies, one of which has a [[heavy brass key]] and a [[letter on elegant stationary]]. Reading this letter to learn of a plot to sabotage the vineyards. This will also open the option to investigate [[Coronata]] for answers, and is a requirement for starting [[Wine Wars: The Deus in the Machina]].
+
+Hidden treasure southwest of [[Prophet Lebioda Statue]]
+: Clear out the three [[rotfiend]]s to finish this area. Note also that on the dead body is a [[Augustin Tonnelliay's journal|journal]] that starts the treasure hunt quest [[Don't Take Candy from a Stranger]].
+
+[[Abandoned site]] at [[Dantan Glade]], northeast of [[Fort Astre Ruins]]
+: Kill the two archespores, then Geralt will automatically meditate and time will pass (like for every abandoned site, except no {{xp}} is earned here). Afterwards, you can loot one of the bodies in the cart for a [[Letter from Augustin Tonneliay|letter]].
+
+[[Person(s) in distress]] west at [[Herbalist's Hut (Gorgon Foothills)|Herbalist's Hut]], west of [[Fox Hollow]]
+: Here you have to rescue Matilda's [[Armorer (Vermentino)|armorer]] from three bandits. Once you take them out, he'll ask for you to go with him back to [[Vermentino]], but you can choose to stay with no repercussions.
+
+Abandoned site at [[Pavone Slope]], south of [[Lac Célavy]]
+: Kill the lone archespore here, and after time passes, you can loot one of the bodies in the cart for a [[Letter to a lover|love letter]]. Similarly to the other abandoned site, there's no {{xp}} for liberating this area.
+
+After completing all 5 tasks, you can either head right back to Plegmund's Bridge or, if you read the letter on elegant stationery and haven't done Liam's quest, go do [[Wine Wars: Coronata]]. Note that if you don't complete Liam's tasks before turning in Matilda's, you can still collect a reward from him after finishing, but the order of things you decide to do here will determine who acquires Belgaard, as well as the outcome of [[Wine Wars: Belgaard]]'s second part.
+
+The payment and 100{{xp}} can be received at different points, also depending on the order of tasks completion:
+* if [[Wine Wars: The Deus in the Machina]] was completed before both Liam and Matilda's quests and there are still tasks remaining for either, the reward will become part of [[Wine Wars: Consorting]] instead
+* if Liam's quest was completed first, you will get the reward for this one as soon as you return to Matilda
+* in any other case, it is received after the first talk at [[Belgaard Manor]] later
+
+== Journal entry ==
+:''In the duchy of wine there is nothing more important than this noblest of beverages. And when two important winemaking families began to quarrel over which would assume control of one of the duchy's oldest vineyards, all knew sparks would fly... Fully aware of the circumstances, Geralt nonetheless decided to help Matilda Vermentino deal with the troubles at her vineyard, even if this meant making Liam de Coronata his foe.''
+:''It was not easy, but the witcher managed to resolve the troubles plaguing the Vermentino vineyard. Pleased with a job well done, he headed back to Matilda to collect his pay.''
+:'''If Geralt only helps Matilda get Belgaard:'''
+::''The witcher had helped, and the Vermentino Vineyard could bloom again. To the ducal clerk, this was proof Matilda was an able steward. He now believed she would also manage Belgaard well.''
+:'''If Geralt helped her only after helping Liam get Belgaard:'''
+::''The witcher dawdled in tending to the Vermentino Vineyard's problems. Alas for Matilda, who lost her chance to take over Belgaard, the title to which would now go to her rival, Liam de Coronata.''
+:'''If Geralt ends the feud between Liam and Matilda:'''
+::''While tending to the problems at Vermentino, Geralt had found proof that a third party was behind the troubles there. He realized this knowledge could be valuable to Matilda and Liam, and decided to share it with them both. Yet again his intuition did not fail him. Coronata's and Vermentino's owners realized they could gain by joining forces and possibly lose much by continuing to qarrel. They resolved from that day forward to cooperate - more, to form a consortium.''
+:'''If Geralt helps both before completing [[Wine Wars: The Deus in the Machina]]:'''
+::''Geralt concluded that it would be unfair of him to help Matilda alone while leaving poor Liam out in the cold. Thus he decided to resolve the problems that Liam claimed had appeared at the Coronata Vineyard. With this accomplished and with the ducal clerk doing some prodding of his own, the two young vintners concluded they would benefit more from striking up an alliance than from continuing their feud. Thus they formed a consortium and continued to produce wines under a single enterprise name.''
+
+== Objectives ==
+* Solve all the problems at the Vermentino Vineyard.
+* [Optional] Read the notes found at the Vermentino Vineyard.
+* '''If Geralt read the note:'''
+** [Optional] Search Coronata for proof of sabotage.
+* '''Mutually exclusive depending of whether Geralt investigated Vermentino:'''
+** Inform Matilda that you've solved all her problems at Vermentino.
+** Without investigating Coronata's problems, let Matilda take over Belgaard, or continue investigating and deal with Liam's problems.
+
+[[Category:Blood and Wine quests]]
+
+[[pl:Awantura o wino: Vermentino]]
+[[ru:Винные войны: Верментино]]

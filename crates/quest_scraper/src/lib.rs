@@ -1,13 +1,15 @@
 pub mod client;
 pub mod error;
+pub mod language;
+#[cfg(any(test, feature = "mock"))]
 pub mod mock;
 pub mod models;
-pub mod parser;
+pub mod wikitext;
 
-pub use client::{BatchResult, WikiScraperClient};
+pub use client::{QUEST_CATEGORIES, WikiScraperClient};
 pub use error::{Result, ScraperError};
-pub use mock::mock_sample_quests;
-pub use models::{
-    ScrapedQuest, ScrapedQuestSource, ScrapedQuestStore, ScrapedQuestType, ScrapedRegion,
-};
-pub use parser::parse_quest_html;
+pub use language::Language;
+#[cfg(any(test, feature = "mock"))]
+pub use mock::mock_scrape_result;
+pub use models::{ScrapeProgress, ScrapeResult, ScrapedQuest, WikiPage};
+pub use wikitext::parse_quest;

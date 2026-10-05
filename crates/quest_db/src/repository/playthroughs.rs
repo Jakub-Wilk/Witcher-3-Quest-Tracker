@@ -1,6 +1,6 @@
-use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 
+use super::util::parse_timestamp;
 use crate::error::{QuestTrackerError, Result};
 use crate::models::{NewPlaythrough, Playthrough, PlaythroughUpdate};
 
@@ -93,26 +93,6 @@ fn map_row(row: &rusqlite::Row) -> rusqlite::Result<Playthrough> {
         created_at,
         updated_at,
     })
-}
-
-fn parse_timestamp(s: &str, field_name: &str) -> rusqlite::Result<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(s)
-        .map(|dt| dt.with_timezone(&Utc))
-        .or_else(|_| {
-            // SQLite strftime default format "%Y-%m-%dT%H:%M:%SZ" without offset
-            chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%SZ")
-                .map(|ndt| DateTime::<Utc>::from_naive_utc_and_offset(ndt, Utc))
-        })
-        .map_err(|e| {
-            rusqlite::Error::FromSqlConversionFailure(
-                0,
-                rusqlite::types::Type::Text,
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Failed to parse timestamp for {field_name}: '{s}': {e}"),
-                )),
-            )
-        })
 }
 
 #[cfg(test)]

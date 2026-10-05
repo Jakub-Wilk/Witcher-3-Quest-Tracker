@@ -436,3 +436,39 @@ button { font: inherit; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--gold-dim); }
+
+/* ---------- Additions: localized names, missable notes ---------- */
+
+.quest-original-name { margin-top: 2px; color: var(--text-muted); font-size: 12px; font-style: italic; }
+
+.quest-important {
+    margin-top: 6px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: var(--red-glow);
+    color: #f5b7b1;
+    font-size: 12px;
+    line-height: 1.45;
+    white-space: pre-line;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.btn-icon {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border-card);
+    padding: 3px 8px;
+    font-size: 12px;
+}
+
+.btn-icon:hover { color: var(--gold); border-color: var(--gold-dim); }
+
+
+.modal-delete { margin-right: auto; }
+
+.sort-field { margin-top: 14px; }
+.sidebar .field .section-title { margin-bottom: 4px; }
+.reset-filters { margin-top: 14px; width: 100%; }

@@ -1,13 +1,13 @@
 mod cutoff_pane;
 mod header;
-mod new_playthrough_modal;
+mod playthrough_modal;
 mod quest_card;
 mod quest_list;
 mod sidebar;
 
 pub use cutoff_pane::CutoffPane;
 pub use header::Header;
-pub use new_playthrough_modal::NewPlaythroughModal;
+pub use playthrough_modal::PlaythroughModal;
 pub use quest_card::QuestCard;
 pub use quest_list::QuestList;
 pub use sidebar::Sidebar;
@@ -56,11 +56,12 @@ pub fn region_label(region: Region) -> &'static str {
         Region::WhiteOrchard => "White Orchard",
         Region::Velen => "Velen",
         Region::Novigrad => "Novigrad",
+        Region::Oxenfurt => "Oxenfurt",
         Region::Skellige => "Skellige",
         Region::KaerMorhen => "Kaer Morhen",
+        Region::Vizima => "Vizima",
         Region::Toussaint => "Toussaint",
-        Region::OxenFurtSewers => "Oxenfurt",
-        Region::Unknown => "Unknown",
+        Region::Unknown => "Unknown region",
     }
 }
 
@@ -77,4 +78,32 @@ pub fn difficulty_label(difficulty: Difficulty) -> &'static str {
 /// Completed or failed quests can no longer be locked out.
 pub fn is_open(status: QuestStatus) -> bool {
     matches!(status, QuestStatus::NotStarted | QuestStatus::InProgress)
+}
+
+/// URL of a quest's page on the Witcher wiki.
+pub fn wiki_url(wiki_title: &str) -> String {
+    let mut url = String::from("https://witcher.fandom.com/wiki/");
+    for byte in wiki_title.replace(' ', "_").bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b':' | b'(' | b')'
+            | b'!' | b',' | b'\'' | b'*' => url.push(byte as char),
+            _ => url.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    url
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wiki_url_encodes_reserved_characters() {
+        assert_eq!(
+            wiki_url("What Was This About Again?"),
+            "https://witcher.fandom.com/wiki/What_Was_This_About_Again%3F"
+        );
+        assert_eq!(wiki_url("The Last Wish (quest)"), "https://witcher.fandom.com/wiki/The_Last_Wish_(quest)");
+        assert_eq!(wiki_url("Ä"), "https://witcher.fandom.com/wiki/%C3%84");
+    }
 }

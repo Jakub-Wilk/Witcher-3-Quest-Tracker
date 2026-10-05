@@ -1,10 +1,12 @@
+use std::path::Path;
+
 use rusqlite::Connection;
 use rusqlite_migration::{Migrations, M};
 
 use crate::error::Result;
 
 /// Opens (or creates) the SQLite DB at `path` and applies all pending migrations.
-pub fn open(path: &str) -> Result<Connection> {
+pub fn open(path: impl AsRef<Path>) -> Result<Connection> {
     let mut conn = Connection::open(path)?;
     configure_pragmas(&conn)?;
     migrations().to_latest(&mut conn)?;

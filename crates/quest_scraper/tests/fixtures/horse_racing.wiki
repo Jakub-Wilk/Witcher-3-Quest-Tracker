@@ -1,0 +1,19 @@
+[[File:Tw3 races crows perch.jpg|thumb|300x300px]]
+
+In {{Tw3}} and its expansions, '''horse racing''' is an activity in which [[Geralt of Rivia|Geralt]] may partake along with his horse [[Roach]]. In general, a horse race will have a quest associated with it, in which Geralt must place a bet with a bookmaker. If Geralt loses a race, the amount bet on it will be lost, and in some cases the associated quest or quest objective may fail. Conversely, if Geralt wins a race, he will receive an amount of [[crown]]s which is double that of the bet. In some races, horse equipment prizes may be on offer, which Geralt can use to raise Roach's stamina, maximum fear level, or his own carrying capacity.
+
+=={{Tw3}}==
+* [[Race: The Great Erasmus Vegelbud Memorial Derby]]
+* [[Races: Crow's Perch]]
+* [[The Heroes' Pursuits: Fayrlund]]
+* [[The Heroes' Pursuits: Kaer Trolde]]
+* [[The Heroes' Pursuits: Fyresdal]]
+* [[The Heroes' Pursuits: For the Goddess' Glory!]]
+
+=={{HoS}}==
+*[[Races: Swift as the Western Winds]]
+
+[[ar:سباق خيل]]
+[[Category:The Witcher 3 mini-games]]
+[[Category:The Witcher 3 secondary quests]]
+[[Category:Hearts of Stone quests]]

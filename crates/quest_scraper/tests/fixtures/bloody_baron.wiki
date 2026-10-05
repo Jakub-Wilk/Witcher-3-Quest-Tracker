@@ -1,0 +1,81 @@
+{{DisambigMsg|This article is about = the quest|for = the person commonly known as "Bloody Baron"|see = Phillip Strenger}}
+{{Infobox Quest3
+|type = Main
+|name = Bloody Baron
+|image = Tw3 bloody baron quest.jpg
+|region = [[Velen]]
+|location = [[Crow's Perch]]
+|level = 6
+|reward = 100{{xp}}
+|previous = [[The Nilfgaardian Connection]]
+|next = [[Ciri's Story: The King of the Wolves]]
+|enemies = Baron's Henchmen {{Small|optional}}<br/>[[Water hag]] {{Small|optional}}
+|starting_icon = Velen}}
+'''Bloody Baron''' is a [[:Category:The Witcher 3 main quests|main quest]] in {{Tw3}} and can be completed before or after [[Hunting a Witch]] in Act I.
+
+== Walkthrough ==
+Arriving at [[Crow's Perch]], Geralt's greeting will vary depending on how he treated the Baron's men in the quest [[The Nilfgaardian Connection]]. If he killed them, the townsfolk here will be afraid of his coming and the guards will be hostile and will not let Geralt pass the gate. If Geralt did not kill the Baron's men he should have little trouble convincing the gate guards to allow him to see the Baron. A third option exists where Geralt avoided the Baron's men entirely by not going to the [[Inn at the Crossroads]]. In this case, the guards will not trust Geralt but will not attack him, so he will have to either pay 15 {{Crown}} or use the alternate entry below.
+
+=== Forceful Path ===
+Head back down the hill into the village near the castle. When Geralt enters the area marked on the map he will spot an old peasant sitting on some wood. Geralt can choose to talk to the man or continue searching for another entrance without his help. Even after starting to talk to the old man Geralt can decide to find the entrance on his own.[[File:Oldman.png|thumb|220x220px|I'm too old to scuttle away]]
+Ask the old man if he knows the area well to find out if there is another way into the castle besides the main gate. The man reveals that the [[Innkeep (Inn at the Crossroads)|innkeep]] at the crossroads where you fought the Baron's men is actually his sister's husband. In addition, the old man suggests Geralt make a monetary donation in exchange for information about sneaking into the castle. Either pay the man 15 {{Crown}} or refuse to pay and find the entrance yourself. If Geralt chooses to pay, the old man will tell a story of a boy found drowned in the moat near the castle. Later his missing hat was found beside the well inside the castle walls which meant it was likely the boy fell into the well meaning there might be a passage between the well and the river. He will explain how to get to a shrine that was made for the dead boy on the northwest side of the castle.
+
+Follow the old man's directions, the objective marker, or simply go to the location marked on the map in the gallery to reach the shrine and search the area on the opposite side of the moat from the shrine to locate the hidden cave entrance.
+
+{{Condition|Note}} The cave is very dark inside and you will have to defend yourself. It is recommended that you use a [[Cat (potion)|Cat potion]] to help see better. Additionally there are several containers with good loot in the cave, be sure to check below the water's surface for some loot containers. One of the chests in this cave is associated with the quest [[Scavenger Hunt: Wolf School Gear]].''
+
+Dive under the water to enter the cave and explore it to find the entrance to the well, making sure to watch out for the [[water hag]] that spawns here. Immediately upon exiting the well a cut scene will occur that will introduce Geralt to the Baron and start a conversation.
+
+=== Peaceful Path ===
+If Geralt is able to enter peacefully, follow the sergeant as he leads through the castle grounds. Geralt may choose to ask about his service in the war and how his men are faring thus far. He will lead Geralt to the garden where the Baron is speaking to [[Havart var Moehoen]].
+
+=== Talk to the Baron ===
+Whether Geralt entered peacefully or forcefully, the Baron greets him joyfully enough, asking Geralt to join him in his chambers. Inside, choose whichever dialogue you want and eventually the Baron will reveal how he met [[Ciri]], who appeared exhausted, wounded, and soaking wet. The quest concludes here and [[Ciri's Story: The King of the Wolves]] begins....
+
+== Journal entry ==
+:''Nilfgaard's agent had determined Ciri had stayed with the baron - the self-proclaimed ruler of [[Velen]]. This man was known for his violent temper and three-mile-long cruel streak, hence his moniker: the Bloody Baron. Geralt, however, was not one to be frightened by nicknames, least of all those taken from bodily fluids, and so made his way to Crow's Perch, the baron's seat, to ask about Cirilla.''
+:'''If Geralt causes a fight earlier at the Inn at the Crossroads:'''
+::''The guards at the castle gate were clearly not happy to see Geralt. They denied him entry, growling a few threats as they sent him on his way. However, the witcher had to talk to the Bloody Baron, so he set out to find another way into Crow's Perch.''
+::'''If Geralt gets help from the old man:'''
+:::''Surprisingly, Geralt got some help from a villager he met near the castle. The old man directed the witcher to the source of an old well, claiming Geralt would find a way into Crow's Perch from there.''
+:''Geralt found his meeting with the Bloody Baron quite peculiar, and the baron himself not so bloody at all. Or did it just seem so? In any case, it turned out Ciri had indeed visited Crow's Perch some time past, but further information about her was only available for a price.''
+
+== Objectives ==
+* Go to the baron's castle.
+* Find the baron.
+* '''If allowed in:'''
+** Follow the sergeant.
+* '''If went straight to the cave:'''
+** Climb up through the old well to enter the castle.
+* '''If not allowed in:'''
+** Search the village to find another way into the castle.
+** Talk to the old man.
+** '''Didn't pay the old man:'''
+*** Go back to the old man if you decide to pay him for his information.
+** Explore the cave and find a way into the castle.
+** Climb up through the old well to enter the castle.
+* Talk to the baron.
+
+==Bugs==
+* If the player chose not to kill the Baron's men during [[The Nilfgaardian Connection]] quest by choosing a peaceful dialogue option but aggravating the men afterwards and then fleeing the fight, this still counts as killing then for the purposes of the quest.
+
+== Notes ==
+* If you try to use the cave to sneak into Crow's Perch prior to completing the quest [[The Nilfgaardian Connection]], you will find that the entrance is blocked by debris and there will be a few of the Baron's men standing nearby arguing about who will clean it up.
+
+== Videos ==
+<gallery position="center">
+File:Bloody_Baron_quest
+</gallery>
+
+== Gallery ==
+<gallery>
+Crowsperchmap.png|Cave located Northwest of the castle
+</gallery>
+
+[[ar:البارون الدموي (مهمة)]]
+[[it:Il Barone Sanguinario]]
+[[pl:Krwawy Baron (zadanie)]]
+[[ru:Кровавый Барон (квест)]]
+[[tr:Kanlı Baron (görev)]]
+[[uk:Кривавий Барон (завдання)]]
+[[Category:The Witcher 3 main quests]]

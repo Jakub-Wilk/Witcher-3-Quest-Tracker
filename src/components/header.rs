@@ -1,14 +1,25 @@
 use dioxus::prelude::*;
+use quest_db::Playthrough;
 
-use super::{NewPlaythroughModal, difficulty_label};
+use super::{PlaythroughModal, difficulty_label};
 use crate::state::AppState;
 
-/// Top bar: title, playthrough switcher and "+ New" button.
+/// Which playthrough modal is open.
+#[derive(Clone, PartialEq)]
+enum Modal {
+    Closed,
+    New,
+    Edit(Playthrough),
+}
+
+/// Top bar: title, playthrough switcher, edit and "+ New" buttons.
 #[component]
 pub fn Header() -> Element {
     let mut state = use_context::<AppState>();
-    let mut show_modal = use_signal(|| false);
+    let mut modal = use_signal(|| Modal::Closed);
     let current = *state.current.read();
+    let current_playthrough =
+        state.playthroughs.read().iter().find(|p| Some(p.id) == current).cloned();
 
     rsx! {
         header { class: "header",
@@ -19,7 +30,7 @@ pub fn Header() -> Element {
                         class: "select",
                         onchange: move |e| {
                             if let Ok(id) = e.value().parse() {
-                                state.select_playthrough(id);
+                                state.select_playthrough(Some(id));
                             }
                         },
                         for p in state.playthroughs.read().iter() {
@@ -32,11 +43,23 @@ pub fn Header() -> Element {
                         }
                     }
                 }
-                button { class: "btn btn-ghost", onclick: move |_| show_modal.set(true), "+ New" }
+                if let Some(p) = current_playthrough {
+                    button {
+                        class: "btn btn-ghost",
+                        title: "Rename or delete this playthrough",
+                        onclick: move |_| modal.set(Modal::Edit(p.clone())),
+                        "✎ Edit"
+                    }
+                }
+                button { class: "btn btn-ghost", onclick: move |_| modal.set(Modal::New), "+ New" }
             }
         }
-        if show_modal() {
-            NewPlaythroughModal { on_close: move |_| show_modal.set(false) }
+        match modal() {
+            Modal::Closed => rsx! {},
+            Modal::New => rsx! { PlaythroughModal { on_close: move |_| modal.set(Modal::Closed) } },
+            Modal::Edit(p) => rsx! {
+                PlaythroughModal { existing: p, on_close: move |_| modal.set(Modal::Closed) }
+            },
         }
     }
 }

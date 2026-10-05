@@ -1,34 +1,25 @@
 //! Shared reactive app state, provided once at the root via context.
 
+use std::path::{Path, PathBuf};
+
 use chrono::Utc;
 use dioxus::prelude::*;
 use quest_db::{
-    CompletionSummary, Connection, NewPlaythrough, Playthrough, ProgressFilter, Quest,
-    QuestProgress, QuestProgressUpdate, QuestSource, QuestStatus, QuestType, playthroughs,
-    progress,
+    CompletionSummary, Connection, NewPlaythrough, Playthrough, PlaythroughUpdate, ProgressFilter,
+    Quest, QuestProgress, QuestProgressUpdate, QuestStatus, playthroughs, progress, settings,
 };
+use quest_scraper::{Language, ScrapeProgress};
 
-/// Sidebar / search filters applied to the quest list.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct Filter {
-    pub source: Option<QuestSource>,
-    pub quest_type: Option<QuestType>,
-    pub search: String,
-}
+use crate::sync_service::SYNC_LANGUAGE_KEY;
+use crate::view_options::ViewOptions;
 
-impl Filter {
-    pub fn matches(&self, quest: &Quest) -> bool {
-        self.source.is_none_or(|s| s == quest.source)
-            && self.quest_type.is_none_or(|t| t == quest.quest_type)
-            && (self.search.is_empty()
-                || quest.name.to_lowercase().contains(&self.search.to_lowercase()))
-    }
-}
+/// Settings key holding the id of the last selected playthrough.
+const LAST_PLAYTHROUGH_KEY: &str = "last_playthrough_id";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SyncStatus {
     Idle,
-    Running { done: usize, total: usize },
+    Running(ScrapeProgress),
     Done(String),
     Failed(String),
 }
@@ -43,8 +34,12 @@ pub struct AppState {
     /// Every quest with its progress in the current playthrough (unfiltered).
     pub rows: Signal<Vec<(Quest, QuestProgress)>>,
     pub summary: Signal<CompletionSummary>,
-    pub filter: Signal<Filter>,
+    /// Quest list filters and sort order; persisted to `view_options_path` on change.
+    pub view: Signal<ViewOptions>,
+    pub view_options_path: CopyValue<PathBuf>,
     pub sync: Signal<SyncStatus>,
+    /// Language selected for the next sync (defaults to the last synced one).
+    pub language: Signal<Language>,
     pub error: Signal<Option<String>>,
 }
 
@@ -56,20 +51,38 @@ impl PartialEq for AppState {
 }
 
 impl AppState {
-    pub fn new(conn: Connection) -> Self {
+    /// `view_options_path` is the TOML file holding the quest list filters and sort order.
+    pub fn new(conn: Connection, view_options_path: &Path) -> Self {
+        let language = settings::get(&conn, SYNC_LANGUAGE_KEY)
+            .ok()
+            .flatten()
+            .and_then(|code| code.parse().ok())
+            .unwrap_or_default();
+        let last_playthrough: Option<i64> = settings::get(&conn, LAST_PLAYTHROUGH_KEY)
+            .ok()
+            .flatten()
+            .and_then(|id| id.parse().ok());
+
         let mut state = Self {
             db: CopyValue::new(conn),
             playthroughs: Signal::new(Vec::new()),
             current: Signal::new(None),
             rows: Signal::new(Vec::new()),
             summary: Signal::new(CompletionSummary::default()),
-            filter: Signal::new(Filter::default()),
+            view: Signal::new(ViewOptions::load(view_options_path)),
+            view_options_path: CopyValue::new(view_options_path.to_path_buf()),
             sync: Signal::new(SyncStatus::Idle),
+            language: Signal::new(language),
             error: Signal::new(None),
         };
         state.reload_playthroughs();
-        let latest = state.playthroughs.peek().last().map(|p| p.id);
-        state.current.set(latest);
+        let initial = {
+            let list = state.playthroughs.peek();
+            last_playthrough
+                .filter(|id| list.iter().any(|p| p.id == *id))
+                .or_else(|| list.last().map(|p| p.id))
+        };
+        state.current.set(initial);
         state.reload();
         state
     }
@@ -83,6 +96,15 @@ impl AppState {
                 self.error.set(Some(e.to_string()));
                 None
             }
+        }
+    }
+
+    /// Writes the current view options to disk.
+    pub fn save_view_options(&mut self) {
+        let path = self.view_options_path.read().clone();
+        if let Err(e) = self.view.peek().save(&path) {
+            tracing::error!("Failed to save {}: {e}", path.display());
+            self.error.set(Some(format!("Could not save view settings: {e}")));
         }
     }
 
@@ -111,8 +133,13 @@ impl AppState {
         }
     }
 
-    pub fn select_playthrough(&mut self, id: i64) {
-        self.current.set(Some(id));
+    /// Switches playthrough and remembers it for the next launch.
+    pub fn select_playthrough(&mut self, id: Option<i64>) {
+        self.current.set(id);
+        if let Some(id) = id {
+            let saved = settings::set(&self.db.read(), LAST_PLAYTHROUGH_KEY, &id.to_string());
+            self.report(saved);
+        }
         self.reload();
     }
 
@@ -120,7 +147,24 @@ impl AppState {
         let inserted = playthroughs::insert(&self.db.read(), &new);
         if let Some(id) = self.report(inserted) {
             self.reload_playthroughs();
-            self.select_playthrough(id);
+            self.select_playthrough(Some(id));
+        }
+    }
+
+    pub fn update_playthrough(&mut self, id: i64, update: PlaythroughUpdate) {
+        let updated = playthroughs::update(&self.db.read(), id, &update);
+        if self.report(updated).is_some() {
+            self.reload_playthroughs();
+        }
+    }
+
+    /// Deletes a playthrough (and its progress) and switches to the newest remaining one.
+    pub fn delete_playthrough(&mut self, id: i64) {
+        let deleted = playthroughs::delete(&self.db.read(), id);
+        if self.report(deleted).is_some() {
+            self.reload_playthroughs();
+            let next = self.playthroughs.peek().last().map(|p| p.id);
+            self.select_playthrough(next);
         }
     }
 
