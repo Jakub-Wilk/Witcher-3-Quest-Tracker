@@ -76,28 +76,32 @@ pub struct ScrapedQuest {
     pub quest_type: ScrapedQuestType,
     pub region: ScrapedRegion,
     pub recommended_level: Option<i32>,
-    pub is_failable: bool,
     pub is_unmarked: bool,
     pub sort_order: Option<i32>,
     pub description: Option<String>,
     pub cutoff_quest_name: Option<String>,
+    pub prerequisite_quest_names: Vec<String>,
     pub wiki_url: String,
 }
 
 impl ScrapedQuest {
     /// Converts this in-memory scraped quest into a `quest_db::NewQuest` for insertion.
-    pub fn into_new_quest(self, cutoff_quest_id: Option<i64>) -> quest_db::models::NewQuest {
+    pub fn into_new_quest(
+        self,
+        cutoff_quest_id: Option<i64>,
+        prerequisite_ids: Vec<i64>,
+    ) -> quest_db::models::NewQuest {
         quest_db::models::NewQuest {
             name: self.name,
             source: self.source.into(),
             quest_type: self.quest_type.into(),
             region: self.region.into(),
             recommended_level: self.recommended_level,
-            is_failable: self.is_failable,
             sort_order: self.sort_order,
             description: self.description,
             is_unmarked: self.is_unmarked,
             cutoff_quest_id,
+            prerequisite_ids,
         }
     }
 }

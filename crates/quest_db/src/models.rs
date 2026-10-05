@@ -155,11 +155,11 @@ pub struct Quest {
     pub quest_type: QuestType,
     pub region: Region,
     pub recommended_level: Option<i32>,
-    pub is_failable: bool,
     pub sort_order: Option<i32>,
     pub description: Option<String>,
     pub is_unmarked: bool,
     pub cutoff_quest_id: Option<i64>,
+    pub prerequisite_ids: Vec<i64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -172,11 +172,11 @@ pub struct NewQuest {
     pub quest_type: QuestType,
     pub region: Region,
     pub recommended_level: Option<i32>,
-    pub is_failable: bool,
     pub sort_order: Option<i32>,
     pub description: Option<String>,
     pub is_unmarked: bool,
     pub cutoff_quest_id: Option<i64>,
+    pub prerequisite_ids: Vec<i64>,
 }
 
 /// Filter criteria for querying quests.
@@ -185,7 +185,6 @@ pub struct QuestFilter {
     pub source: Option<QuestSource>,
     pub quest_type: Option<QuestType>,
     pub region: Option<Region>,
-    pub is_failable: Option<bool>,
     pub is_unmarked: Option<bool>,
     pub max_recommended_level: Option<i32>,
 }

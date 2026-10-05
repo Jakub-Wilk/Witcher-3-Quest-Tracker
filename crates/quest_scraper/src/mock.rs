@@ -11,7 +11,6 @@ pub fn mock_sample_quests() -> ScrapedQuestStore {
             quest_type: ScrapedQuestType::MainQuest,
             region: ScrapedRegion::WhiteOrchard,
             recommended_level: Some(1),
-            is_failable: false,
             is_unmarked: false,
             sort_order: Some(1),
             description: Some(
@@ -19,6 +18,7 @@ pub fn mock_sample_quests() -> ScrapedQuestStore {
                     .into(),
             ),
             cutoff_quest_name: None,
+            prerequisite_quest_names: vec![],
             wiki_url: "https://witcher.fandom.com/wiki/Lilac_and_Gooseberries".into(),
         },
         ScrapedQuest {
@@ -27,7 +27,6 @@ pub fn mock_sample_quests() -> ScrapedQuestStore {
             quest_type: ScrapedQuestType::SecondaryQuest,
             region: ScrapedRegion::Skellige,
             recommended_level: Some(15),
-            is_failable: true,
             is_unmarked: false,
             sort_order: Some(5),
             description: Some(
@@ -35,6 +34,7 @@ pub fn mock_sample_quests() -> ScrapedQuestStore {
                     .into(),
             ),
             cutoff_quest_name: Some("Isle of Mists".into()),
+            prerequisite_quest_names: vec!["Nameless".into()],
             wiki_url: "https://witcher.fandom.com/wiki/The_Last_Wish".into(),
         },
         ScrapedQuest {
@@ -43,7 +43,6 @@ pub fn mock_sample_quests() -> ScrapedQuestStore {
             quest_type: ScrapedQuestType::SecondaryQuest,
             region: ScrapedRegion::Novigrad,
             recommended_level: Some(12),
-            is_failable: true,
             is_unmarked: true,
             sort_order: Some(10),
             description: Some(
@@ -51,6 +50,7 @@ pub fn mock_sample_quests() -> ScrapedQuestStore {
                     .into(),
             ),
             cutoff_quest_name: Some("Now or Never".into()),
+            prerequisite_quest_names: vec!["Pyres of Novigrad".into()],
             wiki_url: "https://witcher.fandom.com/wiki/Witch_Hunter_Raids".into(),
         },
     ])

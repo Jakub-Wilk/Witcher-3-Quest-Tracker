@@ -57,7 +57,7 @@ pub fn list_for_playthrough(
 ) -> Result<Vec<(Quest, QuestProgress)>> {
     let mut query = String::from(
         "SELECT q.id, q.name, q.source, q.quest_type, q.region, q.recommended_level,
-                q.is_failable, q.sort_order, q.description, q.is_unmarked, q.cutoff_quest_id,
+                q.sort_order, q.description, q.is_unmarked, q.cutoff_quest_id,
                 q.created_at, q.updated_at,
                 qp.id, qp.playthrough_id, qp.quest_id, COALESCE(qp.status, 'NotStarted'),
                 qp.notes, qp.started_at, qp.completed_at, qp.created_at, qp.updated_at
@@ -205,8 +205,8 @@ fn map_progress_row(row: &rusqlite::Row) -> rusqlite::Result<QuestProgress> {
 }
 
 fn map_quest_part(row: &rusqlite::Row) -> rusqlite::Result<Quest> {
-    let created_at_str: String = row.get(11)?;
-    let updated_at_str: String = row.get(12)?;
+    let created_at_str: String = row.get(10)?;
+    let updated_at_str: String = row.get(11)?;
 
     Ok(Quest {
         id: row.get(0)?,
@@ -215,11 +215,11 @@ fn map_quest_part(row: &rusqlite::Row) -> rusqlite::Result<Quest> {
         quest_type: row.get(3)?,
         region: row.get(4)?,
         recommended_level: row.get(5)?,
-        is_failable: row.get(6)?,
-        sort_order: row.get(7)?,
-        description: row.get(8)?,
-        is_unmarked: row.get(9)?,
-        cutoff_quest_id: row.get(10)?,
+        sort_order: row.get(6)?,
+        description: row.get(7)?,
+        is_unmarked: row.get(8)?,
+        cutoff_quest_id: row.get(9)?,
+        prerequisite_ids: Vec::new(),
         created_at: parse_timestamp(&created_at_str, "created_at")?,
         updated_at: parse_timestamp(&updated_at_str, "updated_at")?,
     })
@@ -230,15 +230,15 @@ fn map_progress_part(
     playthrough_id: i64,
     quest_id: i64,
 ) -> rusqlite::Result<QuestProgress> {
-    let progress_id: Option<i64> = row.get(13)?;
+    let progress_id: Option<i64> = row.get(12)?;
 
-    let status: QuestStatus = row.get(16)?;
-    let notes: Option<String> = row.get(17)?;
-    let started_at_str: Option<String> = row.get(18)?;
-    let completed_at_str: Option<String> = row.get(19)?;
+    let status: QuestStatus = row.get(15)?;
+    let notes: Option<String> = row.get(16)?;
+    let started_at_str: Option<String> = row.get(17)?;
+    let completed_at_str: Option<String> = row.get(18)?;
 
-    let created_at_str: Option<String> = row.get(20)?;
-    let updated_at_str: Option<String> = row.get(21)?;
+    let created_at_str: Option<String> = row.get(19)?;
+    let updated_at_str: Option<String> = row.get(20)?;
 
     let now = Utc::now();
     let created_at = created_at_str
@@ -321,11 +321,11 @@ mod tests {
                 quest_type: QuestType::MainQuest,
                 region: Region::WhiteOrchard,
                 recommended_level: Some(1),
-                is_failable: false,
                 sort_order: Some(1),
                 description: None,
                 is_unmarked: false,
                 cutoff_quest_id: None,
+                prerequisite_ids: vec![],
             },
         )
         .unwrap();
@@ -338,11 +338,11 @@ mod tests {
                 quest_type: QuestType::WitcherContract,
                 region: Region::WhiteOrchard,
                 recommended_level: Some(2),
-                is_failable: false,
                 sort_order: Some(2),
                 description: None,
                 is_unmarked: false,
                 cutoff_quest_id: None,
+                prerequisite_ids: vec![],
             },
         )
         .unwrap();

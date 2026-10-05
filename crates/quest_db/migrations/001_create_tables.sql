@@ -1,9 +1,10 @@
 -- Migration 001: Create core tables for Witcher 3 quest tracking
 --
--- Three normalized tables:
---   playthroughs  — a named game run (difficulty, NG+ flag, notes)
---   quests        — static reference data for every quest in the game
---   quest_progress — per-playthrough progress tracking (status, timestamps, notes)
+-- Four normalized tables:
+--   playthroughs        — a named game run (difficulty, NG+ flag, notes)
+--   quests              — static reference data for every quest in the game
+--   quest_prerequisites — join table for many-to-many quest prerequisites
+--   quest_progress      — per-playthrough progress tracking (status, timestamps, notes)
 
 CREATE TABLE IF NOT EXISTS playthroughs (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,7 +30,6 @@ CREATE TABLE IF NOT EXISTS quests (
                               'KaerMorhen','Toussaint','OxenFurtSewers','Unknown'
                           )),
     recommended_level     INTEGER,
-    is_failable           INTEGER NOT NULL DEFAULT 0 CHECK(is_failable IN (0,1)),
     sort_order            INTEGER,
     description           TEXT,
     is_unmarked           INTEGER NOT NULL DEFAULT 0 CHECK(is_unmarked IN (0,1)),
@@ -42,6 +42,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_quests_name_source ON quests(name, source)
 CREATE INDEX IF NOT EXISTS idx_quests_quest_type ON quests(quest_type);
 CREATE INDEX IF NOT EXISTS idx_quests_source     ON quests(source);
 CREATE INDEX IF NOT EXISTS idx_quests_region     ON quests(region);
+
+CREATE TABLE IF NOT EXISTS quest_prerequisites (
+    quest_id              INTEGER NOT NULL REFERENCES quests(id) ON DELETE CASCADE,
+    prerequisite_quest_id INTEGER NOT NULL REFERENCES quests(id) ON DELETE CASCADE,
+    PRIMARY KEY (quest_id, prerequisite_quest_id),
+    CHECK (quest_id != prerequisite_quest_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_quest_prerequisites_prereq ON quest_prerequisites(prerequisite_quest_id);
 
 CREATE TABLE IF NOT EXISTS quest_progress (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,7 +79,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS quests_updated_at
     AFTER UPDATE OF name, source, quest_type, region, recommended_level,
-                   is_failable, is_unmarked, sort_order, description,
+                   is_unmarked, sort_order, description,
                    cutoff_quest_id ON quests FOR EACH ROW
 BEGIN
     UPDATE quests SET updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = OLD.id;
