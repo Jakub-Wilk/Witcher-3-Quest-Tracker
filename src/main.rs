@@ -20,12 +20,16 @@ use state::AppState;
 /// Inlined rather than loaded via `asset!` so a plain `cargo run` works without the `dx` CLI.
 const STYLE: &str = include_str!("../assets/style.css");
 
+/// Rendered from `assets/logo.svg` by `scripts/render_icons.py`.
+const ICON_PNG: &[u8] = include_bytes!("../assets/icon.png");
+
 fn main() {
     tracing_subscriber::fmt::init();
 
     let window = WindowBuilder::new()
         .with_title("Witcher 3 Quest Tracker")
-        .with_inner_size(LogicalSize::new(1440.0, 900.0));
+        .with_inner_size(LogicalSize::new(1440.0, 900.0))
+        .with_window_icon(dioxus::desktop::icon_from_memory(ICON_PNG).ok());
 
     LaunchBuilder::desktop()
         .with_cfg(Config::new().with_window(window).with_menu(None))

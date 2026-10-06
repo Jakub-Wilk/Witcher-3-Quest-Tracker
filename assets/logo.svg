@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Witcher 3 Quest Tracker</title>
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e5b869"/>
+      <stop offset="1" stop-color="#c09443"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="17" fill="url(#gold)"/>
+  <path fill="#000" d="M10 16.5h9l3.05 14.54 5.25-14.54h9.4l5.25 14.54L45 16.5h9l-6.5 31h-9L32 29.5l-6.5 18h-9z"/>
+</svg>
