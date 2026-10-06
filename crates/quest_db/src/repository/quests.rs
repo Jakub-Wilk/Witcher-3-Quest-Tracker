@@ -1,143 +1,159 @@
 use std::collections::{HashMap, HashSet};
 
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, named_params, params};
 
-use super::util::{QUEST_COLUMNS, map_quest};
+use super::util::{QUEST_COLUMNS, QUEST_FROM, map_quest};
 use crate::error::{QuestTrackerError, Result};
-use crate::models::{NewQuest, Quest, QuestFilter};
+use crate::models::{NewQuest, Quest, QuestText};
 
-/// Inserts static quest reference data into the database and returns the generated ID.
-/// Also inserts any specified prerequisite relationships.
-pub fn insert(conn: &Connection, q: &NewQuest) -> Result<i64> {
-    conn.execute(
-        "INSERT INTO quests (
-            wiki_page_id, wiki_title, name, localized_name, source, quest_type, region,
-            recommended_level, sort_order, description, important_notes, is_unmarked,
-            cutoff_quest_id
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-        params![
-            q.wiki_page_id,
-            q.wiki_title,
-            q.name,
-            q.localized_name,
-            q.source,
-            q.quest_type,
-            q.region,
-            q.recommended_level,
-            q.sort_order,
-            q.description,
-            q.important_notes,
-            q.is_unmarked,
-            q.cutoff_quest_id,
-        ],
-    )?;
-
-    let quest_id = conn.last_insert_rowid();
-    for &prereq_id in &q.prerequisite_ids {
-        add_prerequisite(conn, quest_id, prereq_id)?;
-    }
-    Ok(quest_id)
+/// Inserts or updates a quest by its journal path and replaces its texts. Returns the quest id
+/// and whether it was newly inserted. Cutoff, prerequisites and sort order are left untouched.
+pub fn upsert(conn: &Connection, q: &NewQuest) -> Result<(i64, bool)> {
+    let existing = get_id_by_journal_path(conn, &q.journal_path)?;
+    let id = match existing {
+        Some(id) => {
+            conn.execute(
+                "UPDATE quests SET
+                    journal_guid = ?2, base_name = ?3, source = ?4, quest_type = ?5, region = ?6,
+                    recommended_level = ?7, wiki_page_id = ?8, wiki_title = ?9,
+                    important_notes = ?10, is_unmarked = ?11,
+                    synced_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+                 WHERE id = ?1",
+                params![
+                    id,
+                    q.journal_guid,
+                    q.base_name,
+                    q.source,
+                    q.quest_type,
+                    q.region,
+                    q.recommended_level,
+                    q.wiki_page_id,
+                    q.wiki_title,
+                    q.important_notes,
+                    q.is_unmarked,
+                ],
+            )?;
+            id
+        }
+        None => {
+            conn.execute(
+                "INSERT INTO quests (
+                    journal_path, journal_guid, base_name, source, quest_type, region,
+                    recommended_level, wiki_page_id, wiki_title, important_notes, is_unmarked
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                params![
+                    q.journal_path,
+                    q.journal_guid,
+                    q.base_name,
+                    q.source,
+                    q.quest_type,
+                    q.region,
+                    q.recommended_level,
+                    q.wiki_page_id,
+                    q.wiki_title,
+                    q.important_notes,
+                    q.is_unmarked,
+                ],
+            )?;
+            conn.last_insert_rowid()
+        }
+    };
+    set_texts(conn, id, &q.texts)?;
+    set_extra_journal_paths(conn, id, &q.extra_journal_paths)?;
+    Ok((id, existing.is_none()))
 }
 
-/// Updates the reference data of an existing quest from `q`.
-///
-/// Cutoff, prerequisites and sort order are managed separately (`set_cutoff`,
-/// `set_prerequisites`, `set_sort_order`); per-playthrough progress is never affected.
-pub fn update(conn: &Connection, id: i64, q: &NewQuest) -> Result<()> {
-    let rows_affected = conn.execute(
-        "UPDATE quests SET
-            wiki_page_id = ?2, wiki_title = ?3, name = ?4, localized_name = ?5, source = ?6,
-            quest_type = ?7, region = ?8, recommended_level = ?9, description = ?10,
-            important_notes = ?11, is_unmarked = ?12
-         WHERE id = ?1",
-        params![
-            id,
-            q.wiki_page_id,
-            q.wiki_title,
-            q.name,
-            q.localized_name,
-            q.source,
-            q.quest_type,
-            q.region,
-            q.recommended_level,
-            q.description,
-            q.important_notes,
-            q.is_unmarked,
-        ],
-    )?;
-    if rows_affected == 0 {
-        return Err(QuestTrackerError::QuestNotFound(id));
+/// Replaces the further journal files of a quest. A path already listed for another quest
+/// moves to this one.
+pub fn set_extra_journal_paths(conn: &Connection, quest_id: i64, paths: &[String]) -> Result<()> {
+    conn.execute("DELETE FROM quest_journals WHERE quest_id = ?1", params![quest_id])?;
+    let mut stmt =
+        conn.prepare("INSERT OR REPLACE INTO quest_journals (journal_path, quest_id) VALUES (?1, ?2)")?;
+    for path in paths {
+        stmt.execute(params![path, quest_id])?;
     }
     Ok(())
 }
 
-/// Retrieves a quest by its ID along with its list of prerequisite quest IDs.
-pub fn get(conn: &Connection, id: i64) -> Result<Quest> {
+/// Replaces all texts of a quest.
+pub fn set_texts(conn: &Connection, quest_id: i64, texts: &[QuestText]) -> Result<()> {
+    conn.execute("DELETE FROM quest_texts WHERE quest_id = ?1", params![quest_id])?;
+    let mut stmt = conn.prepare(
+        "INSERT INTO quest_texts (quest_id, language, title, description) VALUES (?1, ?2, ?3, ?4)",
+    )?;
+    for t in texts {
+        stmt.execute(params![quest_id, t.language, t.title, t.description])?;
+    }
+    Ok(())
+}
+
+/// Retrieves a quest with its text in `language` and its prerequisite ids.
+pub fn get(conn: &Connection, id: i64, language: &str) -> Result<Quest> {
     let mut quest = conn
         .query_row(
-            &format!("SELECT {QUEST_COLUMNS} FROM quests q WHERE q.id = ?1"),
-            params![id],
+            &format!("SELECT {QUEST_COLUMNS} {QUEST_FROM} WHERE q.id = :id"),
+            named_params! { ":lang": language, ":id": id },
             map_quest,
         )
         .optional()?
         .ok_or(QuestTrackerError::QuestNotFound(id))?;
-
     quest.prerequisite_ids = get_prerequisites(conn, id)?;
     Ok(quest)
 }
 
-/// Looks up a quest's ID by its MediaWiki page id.
-pub fn get_id_by_page_id(conn: &Connection, wiki_page_id: i64) -> Result<Option<i64>> {
-    conn.query_row(
-        "SELECT id FROM quests WHERE wiki_page_id = ?1",
-        params![wiki_page_id],
-        |row| row.get(0),
-    )
+pub fn get_id_by_journal_path(conn: &Connection, journal_path: &str) -> Result<Option<i64>> {
+    conn.query_row("SELECT id FROM quests WHERE journal_path = ?1", params![journal_path], |row| {
+        row.get(0)
+    })
     .optional()
     .map_err(Into::into)
 }
 
-/// Queries quests with optional filter criteria and populates prerequisite IDs for each quest.
-pub fn list(conn: &Connection, filter: &QuestFilter) -> Result<Vec<Quest>> {
-    let mut query = format!("SELECT {QUEST_COLUMNS} FROM quests q WHERE 1=1");
-    let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+/// Journal path -> quest id for every journal file, including files folded into another quest
+/// (those win over a leftover row of their own).
+pub fn journal_ids(conn: &Connection) -> Result<HashMap<String, i64>> {
+    let mut ids = HashMap::new();
+    for sql in ["SELECT journal_path, id FROM quests", "SELECT journal_path, quest_id FROM quest_journals"] {
+        let mut stmt = conn.prepare(sql)?;
+        let rows = stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)))?;
+        for row in rows {
+            let (path, id) = row?;
+            ids.insert(path, id);
+        }
+    }
+    Ok(ids)
+}
 
-    if let Some(source) = filter.source {
-        param_values.push(Box::new(source));
-        query.push_str(&format!(" AND q.source = ?{}", param_values.len()));
-    }
-    if let Some(quest_type) = filter.quest_type {
-        param_values.push(Box::new(quest_type));
-        query.push_str(&format!(" AND q.quest_type = ?{}", param_values.len()));
-    }
-    if let Some(region) = filter.region {
-        param_values.push(Box::new(region));
-        query.push_str(&format!(" AND q.region = ?{}", param_values.len()));
-    }
-    if let Some(is_unmarked) = filter.is_unmarked {
-        param_values.push(Box::new(is_unmarked));
-        query.push_str(&format!(" AND q.is_unmarked = ?{}", param_values.len()));
-    }
-    if let Some(max_lvl) = filter.max_recommended_level {
-        param_values.push(Box::new(max_lvl));
-        query.push_str(&format!(
-            " AND (q.recommended_level IS NULL OR q.recommended_level <= ?{})",
-            param_values.len()
-        ));
-    }
-    query.push_str(" ORDER BY q.sort_order ASC, q.name ASC");
+pub fn count(conn: &Connection) -> Result<i64> {
+    Ok(conn.query_row("SELECT COUNT(*) FROM quests", [], |row| row.get(0))?)
+}
 
-    let mut stmt = conn.prepare(&query)?;
-    let params_slice: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+/// Languages that have quest text, sorted.
+pub fn languages(conn: &Connection) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare("SELECT DISTINCT language FROM quest_texts ORDER BY language")?;
+    let rows = stmt.query_map([], |row| row.get(0))?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+/// Every quest, in story order, with text in `language` and prerequisite ids.
+pub fn list(conn: &Connection, language: &str) -> Result<Vec<Quest>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {QUEST_COLUMNS} {QUEST_FROM} ORDER BY q.sort_order ASC, q.base_name ASC"
+    ))?;
     let mut quests = stmt
-        .query_map(params_slice.as_slice(), map_quest)?
+        .query_map(named_params! { ":lang": language }, map_quest)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-
     let mut prereqs = all_prerequisites(conn)?;
     for q in &mut quests {
         q.prerequisite_ids = prereqs.remove(&q.id).unwrap_or_default();
     }
     Ok(quests)
+}
+
+/// Detaches every quest from its wiki page, so a sync starts the matching from scratch.
+pub fn clear_wiki_page_ids(conn: &Connection) -> Result<()> {
+    conn.execute("UPDATE quests SET wiki_page_id = NULL", [])?;
+    Ok(())
 }
 
 /// Sets (or clears) the cutoff quest of a quest.
@@ -154,34 +170,23 @@ pub fn set_cutoff(conn: &Connection, id: i64, cutoff_quest_id: Option<i64>) -> R
 
 /// Sets (or clears) the display sort order of a quest.
 pub fn set_sort_order(conn: &Connection, id: i64, sort_order: Option<i32>) -> Result<()> {
-    let rows_affected = conn.execute(
-        "UPDATE quests SET sort_order = ?2 WHERE id = ?1",
-        params![id, sort_order],
-    )?;
+    let rows_affected =
+        conn.execute("UPDATE quests SET sort_order = ?2 WHERE id = ?1", params![id, sort_order])?;
     if rows_affected == 0 {
         return Err(QuestTrackerError::QuestNotFound(id));
     }
     Ok(())
 }
 
-/// Links a prerequisite quest to a target quest.
-pub fn add_prerequisite(conn: &Connection, quest_id: i64, prerequisite_quest_id: i64) -> Result<()> {
-    conn.execute(
-        "INSERT OR IGNORE INTO quest_prerequisites (quest_id, prerequisite_quest_id)
-         VALUES (?1, ?2)",
-        params![quest_id, prerequisite_quest_id],
-    )?;
-    Ok(())
-}
-
 /// Replaces the full set of prerequisites for a quest.
 pub fn set_prerequisites(conn: &Connection, quest_id: i64, prerequisite_ids: &[i64]) -> Result<()> {
-    conn.execute(
-        "DELETE FROM quest_prerequisites WHERE quest_id = ?1",
-        params![quest_id],
-    )?;
+    conn.execute("DELETE FROM quest_prerequisites WHERE quest_id = ?1", params![quest_id])?;
     for &prereq_id in prerequisite_ids {
-        add_prerequisite(conn, quest_id, prereq_id)?;
+        conn.execute(
+            "INSERT OR IGNORE INTO quest_prerequisites (quest_id, prerequisite_quest_id)
+             VALUES (?1, ?2)",
+            params![quest_id, prereq_id],
+        )?;
     }
     Ok(())
 }
@@ -216,7 +221,7 @@ pub fn all_prerequisites(conn: &Connection) -> Result<HashMap<i64, Vec<i64>>> {
     Ok(map)
 }
 
-/// Deletes a quest by ID. Deleting a quest cascades to deleting its prerequisite links.
+/// Deletes a quest by ID, cascading to its texts, prerequisite links and progress.
 pub fn delete(conn: &Connection, id: i64) -> Result<()> {
     let rows_affected = conn.execute("DELETE FROM quests WHERE id = ?1", params![id])?;
     if rows_affected == 0 {
@@ -230,23 +235,24 @@ pub fn delete(conn: &Connection, id: i64) -> Result<()> {
 pub struct MissingQuests {
     /// Number of quests deleted.
     pub deleted: usize,
-    /// Names of quests kept despite being missing, because some playthrough has progress on them.
+    /// Internal names of quests kept despite being missing, because a user set a status or notes.
     pub kept: Vec<String>,
 }
 
-/// Removes quests whose wiki page id is not in `seen_page_ids` — unless any playthrough has
-/// progress recorded for them, in which case they are kept so no user data is lost.
-pub fn delete_missing(conn: &Connection, seen_page_ids: &HashSet<i64>) -> Result<MissingQuests> {
+/// Removes quests whose journal path is not in `seen` — unless a user set a status or wrote notes
+/// for them in some playthrough, in which case they are kept so no user data is lost.
+pub fn delete_missing(conn: &Connection, seen: &HashSet<String>) -> Result<MissingQuests> {
     let mut stmt = conn.prepare(
-        "SELECT q.id, q.wiki_page_id, q.name,
-                EXISTS (SELECT 1 FROM quest_progress qp WHERE qp.quest_id = q.id)
+        "SELECT q.id, q.journal_path, q.base_name,
+                EXISTS (SELECT 1 FROM quest_progress qp WHERE qp.quest_id = q.id
+                        AND (qp.manual_status IS NOT NULL OR qp.notes IS NOT NULL))
          FROM quests q",
     )?;
     let rows = stmt
         .query_map([], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
-                row.get::<_, i64>(1)?,
+                row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
                 row.get::<_, bool>(3)?,
             ))
@@ -254,11 +260,11 @@ pub fn delete_missing(conn: &Connection, seen_page_ids: &HashSet<i64>) -> Result
         .collect::<rusqlite::Result<Vec<_>>>()?;
 
     let mut result = MissingQuests::default();
-    for (id, page_id, name, has_progress) in rows {
-        if seen_page_ids.contains(&page_id) {
+    for (id, path, name, has_user_data) in rows {
+        if seen.contains(&path) {
             continue;
         }
-        if has_progress {
+        if has_user_data {
             result.kept.push(name);
         } else {
             delete(conn, id)?;
@@ -274,120 +280,118 @@ pub(crate) mod tests {
     use crate::db::open_in_memory;
     use crate::models::{QuestSource, QuestType, Region};
 
-    /// A minimal quest for tests; `page_id` doubles as a unique suffix for the title.
-    pub(crate) fn sample(name: &str, page_id: i64) -> NewQuest {
+    /// A minimal quest for tests: `n` makes the journal path unique; English text only.
+    pub(crate) fn sample(title: &str, n: i64) -> NewQuest {
         NewQuest {
-            wiki_page_id: page_id,
-            wiki_title: name.into(),
-            name: name.into(),
-            localized_name: None,
+            journal_path: format!("gameplay\\journal\\quests\\q{n:03}.journal"),
+            journal_guid: format!("guid-{n}"),
+            base_name: format!("Q{n:03}"),
             source: QuestSource::BaseGame,
             quest_type: QuestType::SecondaryQuest,
             region: Region::Velen,
             recommended_level: Some(5),
-            sort_order: None,
-            description: None,
+            wiki_page_id: None,
+            wiki_title: None,
             important_notes: None,
             is_unmarked: false,
-            cutoff_quest_id: None,
-            prerequisite_ids: vec![],
+            texts: vec![QuestText { language: "en".into(), title: title.into(), description: None }],
+            extra_journal_paths: vec![],
         }
     }
 
     #[test]
-    fn test_quest_crud_cutoff_and_prerequisites() {
+    fn extra_journal_paths_map_to_their_quest() {
         let conn = open_in_memory().unwrap();
-
-        let q1_id = insert(&conn, &sample("Pyres of Novigrad", 1)).unwrap();
-        let q2_id = insert(
-            &conn,
-            &NewQuest { prerequisite_ids: vec![q1_id], ..sample("The Isle of Mists", 2) },
-        )
-        .unwrap();
-        let q3_id = insert(
-            &conn,
-            &NewQuest {
-                region: Region::Novigrad,
-                is_unmarked: true,
-                cutoff_quest_id: Some(q2_id),
-                prerequisite_ids: vec![q1_id],
-                ..sample("Witch Hunter Raids", 3)
-            },
-        )
-        .unwrap();
-
-        let q3 = get(&conn, q3_id).unwrap();
-        assert_eq!(q3.name, "Witch Hunter Raids");
-        assert_eq!(q3.wiki_page_id, 3);
-        assert_eq!(q3.cutoff_quest_id, Some(q2_id));
-        assert_eq!(q3.prerequisite_ids, vec![q1_id]);
-        assert!(q3.is_unmarked);
-
-        assert_eq!(get_id_by_page_id(&conn, 3).unwrap(), Some(q3_id));
-        assert_eq!(get_id_by_page_id(&conn, 99).unwrap(), None);
-
-        let filtered = list(
-            &conn,
-            &QuestFilter {
-                region: Some(Region::Novigrad),
-                is_unmarked: Some(true),
-                ..Default::default()
-            },
-        )
-        .unwrap();
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].id, q3_id);
-        assert_eq!(filtered[0].prerequisite_ids, vec![q1_id]);
+        let (a, _) = upsert(&conn, &NewQuest { extra_journal_paths: vec!["x.journal".into()], ..sample("A", 1) }).unwrap();
+        let (b, _) = upsert(&conn, &sample("B", 2)).unwrap();
+        let ids = journal_ids(&conn).unwrap();
+        assert_eq!(ids["x.journal"], a);
+        assert_eq!(ids[&sample("", 2).journal_path], b);
+        // Moving the file to another quest, then dropping it.
+        upsert(&conn, &NewQuest { extra_journal_paths: vec!["x.journal".into()], ..sample("B", 2) }).unwrap();
+        assert_eq!(journal_ids(&conn).unwrap()["x.journal"], b);
+        upsert(&conn, &sample("B", 2)).unwrap();
+        assert!(!journal_ids(&conn).unwrap().contains_key("x.journal"));
+        // Deleting the quest drops its files.
+        upsert(&conn, &NewQuest { extra_journal_paths: vec!["y.journal".into()], ..sample("A", 1) }).unwrap();
+        delete(&conn, a).unwrap();
+        assert!(!journal_ids(&conn).unwrap().contains_key("y.journal"));
     }
 
     #[test]
-    fn test_update_cutoff_prerequisites_and_sort_order() {
+    fn upsert_inserts_then_updates_by_journal_path() {
         let conn = open_in_memory().unwrap();
-        let a = insert(&conn, &sample("A", 1)).unwrap();
-        let b = insert(&conn, &sample("B", 2)).unwrap();
-        let c = insert(&conn, &sample("C", 3)).unwrap();
-
+        let (id, inserted) = upsert(&conn, &sample("Pyres of Novigrad", 1)).unwrap();
+        assert!(inserted);
         let changed = NewQuest {
-            region: Region::Skellige,
-            recommended_level: Some(20),
-            description: Some("Updated".into()),
-            localized_name: Some("Ä".into()),
+            region: Region::Novigrad,
+            wiki_page_id: Some(42),
             important_notes: Some("Missable".into()),
-            ..sample("A renamed", 1)
+            ..sample("Pyres of Novigrad (renamed)", 1)
         };
-        update(&conn, a, &changed).unwrap();
+        let (same, inserted) = upsert(&conn, &changed).unwrap();
+        assert_eq!((same, inserted), (id, false));
+        let q = get(&conn, id, "en").unwrap();
+        assert_eq!(q.title, "Pyres of Novigrad (renamed)");
+        assert_eq!(q.region, Region::Novigrad);
+        assert_eq!(q.wiki_page_id, Some(42));
+        assert_eq!(count(&conn).unwrap(), 1);
+    }
+
+    #[test]
+    fn text_falls_back_to_english_then_internal_name() {
+        let conn = open_in_memory().unwrap();
+        let mut q = sample("Kaer Morhen", 1);
+        q.texts.push(QuestText {
+            language: "pl".into(),
+            title: "Kaer Morhen (PL)".into(),
+            description: Some("Opis".into()),
+        });
+        let (id, _) = upsert(&conn, &q).unwrap();
+        assert_eq!(get(&conn, id, "pl").unwrap().title, "Kaer Morhen (PL)");
+        assert_eq!(get(&conn, id, "pl").unwrap().description.as_deref(), Some("Opis"));
+        assert_eq!(get(&conn, id, "de").unwrap().title, "Kaer Morhen");
+        assert_eq!(languages(&conn).unwrap(), vec!["en".to_string(), "pl".to_string()]);
+
+        set_texts(&conn, id, &[]).unwrap();
+        assert_eq!(get(&conn, id, "en").unwrap().title, "Q001");
+    }
+
+    #[test]
+    fn cutoff_prerequisites_and_sort_order() {
+        let conn = open_in_memory().unwrap();
+        let (a, _) = upsert(&conn, &sample("A", 1)).unwrap();
+        let (b, _) = upsert(&conn, &sample("B", 2)).unwrap();
+        let (c, _) = upsert(&conn, &sample("C", 3)).unwrap();
         set_cutoff(&conn, a, Some(b)).unwrap();
         set_prerequisites(&conn, a, &[b, c]).unwrap();
         set_prerequisites(&conn, a, &[c]).unwrap();
         set_sort_order(&conn, a, Some(7)).unwrap();
+        set_sort_order(&conn, b, Some(1)).unwrap();
+        set_sort_order(&conn, c, Some(2)).unwrap();
 
-        let q = get(&conn, a).unwrap();
-        assert_eq!(q.name, "A renamed");
-        assert_eq!(q.display_name(), "Ä");
-        assert_eq!(q.region, Region::Skellige);
-        assert_eq!(q.recommended_level, Some(20));
-        assert_eq!(q.description.as_deref(), Some("Updated"));
-        assert_eq!(q.important_notes.as_deref(), Some("Missable"));
+        let q = get(&conn, a, "en").unwrap();
         assert_eq!(q.cutoff_quest_id, Some(b));
         assert_eq!(q.prerequisite_ids, vec![c]);
-        assert_eq!(q.sort_order, Some(7));
+        let order: Vec<i64> = list(&conn, "en").unwrap().iter().map(|q| q.id).collect();
+        assert_eq!(order, vec![b, c, a]);
+        assert_eq!(journal_ids(&conn).unwrap().len(), 3);
 
-        set_cutoff(&conn, a, None).unwrap();
-        assert_eq!(get(&conn, a).unwrap().cutoff_quest_id, None);
-
-        assert!(matches!(update(&conn, 999, &changed), Err(QuestTrackerError::QuestNotFound(999))));
+        // Deleting the cutoff target clears the reference.
+        delete(&conn, b).unwrap();
+        assert_eq!(get(&conn, a, "en").unwrap().cutoff_quest_id, None);
+        assert!(matches!(set_cutoff(&conn, 999, None), Err(QuestTrackerError::QuestNotFound(999))));
     }
 
     #[test]
-    fn test_delete_missing_keeps_quests_with_progress() {
-        use crate::models::{Difficulty, NewPlaythrough, QuestProgressUpdate, QuestStatus};
+    fn delete_missing_keeps_quests_with_user_data() {
+        use crate::models::{Difficulty, NewPlaythrough, QuestStatus};
         use crate::repository::{playthroughs, progress};
 
         let conn = open_in_memory().unwrap();
-        let kept = insert(&conn, &sample("Has progress", 1)).unwrap();
-        let gone = insert(&conn, &sample("No progress", 2)).unwrap();
-        let seen = insert(&conn, &sample("Still on wiki", 3)).unwrap();
-
+        let (kept, _) = upsert(&conn, &sample("Has a manual status", 1)).unwrap();
+        let (gone, _) = upsert(&conn, &sample("Only save status", 2)).unwrap();
+        let (seen, _) = upsert(&conn, &sample("Still in the game", 3)).unwrap();
         let pt = playthroughs::insert(
             &conn,
             &NewPlaythrough {
@@ -395,28 +399,18 @@ pub(crate) mod tests {
                 difficulty: Difficulty::DeathMarch,
                 is_new_game_plus: false,
                 notes: None,
+                link: None,
             },
         )
         .unwrap();
-        progress::update_status(
-            &conn,
-            pt,
-            kept,
-            &QuestProgressUpdate { status: Some(QuestStatus::Completed), ..Default::default() },
-        )
-        .unwrap();
+        progress::set_manual_status(&conn, pt, kept, Some(QuestStatus::Completed)).unwrap();
+        progress::apply_save_statuses(&conn, pt, &HashMap::from([(gone, QuestStatus::Completed)]))
+            .unwrap();
 
-        let result = delete_missing(&conn, &HashSet::from([3])).unwrap();
-        assert_eq!(result, MissingQuests { deleted: 1, kept: vec!["Has progress".into()] });
-        assert!(get(&conn, kept).is_ok());
-        assert!(get(&conn, gone).is_err());
-        assert!(get(&conn, seen).is_ok());
-    }
-
-    #[test]
-    fn test_wiki_page_id_is_unique() {
-        let conn = open_in_memory().unwrap();
-        insert(&conn, &sample("A", 1)).unwrap();
-        assert!(insert(&conn, &sample("B", 1)).is_err());
+        let result = delete_missing(&conn, &HashSet::from([sample("", 3).journal_path])).unwrap();
+        assert_eq!(result, MissingQuests { deleted: 1, kept: vec!["Q001".into()] });
+        assert!(get(&conn, kept, "en").is_ok());
+        assert!(get(&conn, gone, "en").is_err());
+        assert!(get(&conn, seen, "en").is_ok());
     }
 }

@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use quest_db::{Difficulty, NewPlaythrough, Playthrough, PlaythroughUpdate};
 
-use super::{DIFFICULTIES, difficulty_label};
+use super::{DIFFICULTIES, difficulty_label, format_local};
 use crate::state::AppState;
 
 /// Modal form for creating a playthrough, or editing `existing` (with a delete option).
@@ -15,6 +15,9 @@ pub fn PlaythroughModal(existing: Option<Playthrough>, on_close: EventHandler<()
     let mut ng_plus = use_signal(|| initial.as_ref().is_some_and(|p| p.is_new_game_plus));
     let mut notes = use_signal(|| initial.as_ref().and_then(|p| p.notes.clone()).unwrap_or_default());
     let mut confirm_delete = use_signal(|| false);
+    let mut confirm_unlink = use_signal(|| false);
+    let link = existing.as_ref().and_then(|p| p.link.clone());
+    let head = existing.as_ref().and_then(|p| p.head.clone());
 
     let editing_id = existing.as_ref().map(|p| p.id);
     let can_save = !name.read().trim().is_empty();
@@ -35,12 +38,13 @@ pub fn PlaythroughModal(existing: Option<Playthrough>, on_close: EventHandler<()
                     notes: Some(trimmed_notes),
                 },
             ),
-            None => state.create_playthrough(NewPlaythrough {
+            None => drop(state.create_playthrough(NewPlaythrough {
                 name: trimmed_name,
                 difficulty: difficulty(),
                 is_new_game_plus: ng_plus(),
                 notes: trimmed_notes,
-            }),
+                link: None,
+            })),
         }
         on_close.call(());
     };
@@ -94,6 +98,30 @@ pub fn PlaythroughModal(existing: Option<Playthrough>, on_close: EventHandler<()
                         rows: 3,
                         value: "{notes}",
                         oninput: move |e| notes.set(e.value()),
+                    }
+                }
+                if let (Some(id), Some(link)) = (editing_id, link) {
+                    div { class: "field link-info",
+                        span { "Save tracking" }
+                        p { class: "muted small",
+                            "Linked to the in-game run started {format_local(link.started_at)}"
+                            if let Some(game_id) = &link.game_playthrough_id { " (ID {game_id})" }
+                            "."
+                            if let Some(head) = &head { " Last save read: {head.file}, {format_local(head.saved_at)}." }
+                        }
+                        button {
+                            class: "btn btn-ghost",
+                            r#type: "button",
+                            onclick: move |_| {
+                                if confirm_unlink() {
+                                    state.unlink_playthrough(id);
+                                    on_close.call(());
+                                } else {
+                                    confirm_unlink.set(true);
+                                }
+                            },
+                            if confirm_unlink() { "Click again to stop tracking (save statuses are cleared)" } else { "Stop tracking saves" }
+                        }
                     }
                 }
                 div { class: "modal-actions",

@@ -1,15 +1,23 @@
 mod cutoff_pane;
+mod detected_runs;
 mod header;
+mod onboarding;
 mod playthrough_modal;
 mod quest_card;
 mod quest_list;
+mod save_watcher;
+mod settings_modal;
 mod sidebar;
 
 pub use cutoff_pane::CutoffPane;
+pub use detected_runs::DetectedRuns;
 pub use header::Header;
+pub use onboarding::{Onboarding, OnboardingStep};
 pub use playthrough_modal::PlaythroughModal;
 pub use quest_card::QuestCard;
 pub use quest_list::QuestList;
+pub use save_watcher::SaveWatcher;
+pub use settings_modal::SettingsModal;
 pub use sidebar::Sidebar;
 
 use quest_db::{Difficulty, QuestSource, QuestStatus, QuestType, Region};
@@ -73,6 +81,20 @@ pub fn difficulty_label(difficulty: Difficulty) -> &'static str {
         Difficulty::DeathMarch => "Death March!",
         Difficulty::Custom => "Custom",
     }
+}
+
+/// A local date and time from a save, e.g. `2026-10-06 00:39`.
+pub fn format_local(time: Option<chrono::NaiveDateTime>) -> String {
+    time.map(|t| t.format("%Y-%m-%d %H:%M").to_string()).unwrap_or_else(|| "unknown time".into())
+}
+
+/// Opens a folder picker starting at `start`.
+pub async fn pick_folder(title: &str, start: Option<std::path::PathBuf>) -> Option<std::path::PathBuf> {
+    let mut dialog = rfd::AsyncFileDialog::new().set_title(title);
+    if let Some(start) = start.filter(|s| s.is_dir()) {
+        dialog = dialog.set_directory(start);
+    }
+    dialog.pick_folder().await.map(|f| f.path().to_path_buf())
 }
 
 /// Completed or failed quests can no longer be locked out.

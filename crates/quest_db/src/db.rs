@@ -33,9 +33,10 @@ fn configure_pragmas(conn: &Connection) -> Result<()> {
 }
 
 fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(include_str!(
-        "../migrations/001_create_tables.sql"
-    ))])
+    Migrations::new(vec![
+        M::up(include_str!("../migrations/001_create_tables.sql")),
+        M::up(include_str!("../migrations/002_quest_journals.sql")),
+    ])
 }
 
 #[cfg(test)]

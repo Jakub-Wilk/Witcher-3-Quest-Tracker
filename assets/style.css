@@ -425,6 +425,8 @@ button { font: inherit; }
 }
 
 .toast-error { background: #2a1517; border: 1px solid var(--red); color: var(--text-primary); }
+.toast-info { background: #2a2416; border: 1px solid var(--gold-dim); color: var(--text-primary); max-width: 80vw; }
+.toast-error + .toast-info, .toast-info + .toast-error { bottom: 70px; }
 .toast-close { background: none; border: none; color: var(--text-muted); cursor: pointer; }
 
 .fatal { padding: 40px; }
@@ -437,9 +439,7 @@ button { font: inherit; }
 ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--gold-dim); }
 
-/* ---------- Additions: localized names, missable notes ---------- */
-
-.quest-original-name { margin-top: 2px; color: var(--text-muted); font-size: 12px; font-style: italic; }
+/* ---------- Additions: missable notes ---------- */
 
 .quest-important {
     margin-top: 6px;
@@ -472,3 +472,82 @@ button { font: inherit; }
 .sort-field { margin-top: 14px; }
 .sidebar .field .section-title { margin-bottom: 4px; }
 .reset-filters { margin-top: 14px; width: 100%; }
+
+/* ---------- Save tracking ---------- */
+
+.tracker-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+    max-width: 340px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex: none; }
+.dot-on { background: var(--green); box-shadow: 0 0 8px rgba(46, 204, 113, 0.6); }
+
+.badge-active { color: var(--gold); border-color: var(--gold-dim); background: var(--gold-glow); }
+
+.quest-override { margin-top: 6px; color: var(--text-muted); font-size: 12px; font-style: italic; }
+
+.btn-link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--gold);
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: 12px;
+    font-style: normal;
+}
+
+.link-info p { margin: 0; }
+
+.run-prompt { width: min(520px, 92vw); }
+.run-prompt p { margin: 0; line-height: 1.5; }
+.run-option {
+    border: 1px solid var(--border-card);
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+}
+.run-option legend { color: var(--gold); padding: 0 6px; font-size: 12px; }
+.run-option .btn { align-self: flex-end; }
+
+/* ---------- Onboarding & settings ---------- */
+
+.onboarding { grid-row: 1 / -1; display: grid; place-items: center; padding: 24px; }
+.onboarding-card {
+    width: min(560px, 92vw);
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    border-color: var(--gold-glow);
+}
+.onboarding-card h2 { margin: 0; color: var(--gold); }
+.onboarding-card p { margin: 0; line-height: 1.55; }
+.onboarding-card > .btn-ghost { align-self: flex-start; }
+
+.folder-row { display: flex; gap: 8px; align-items: center; }
+.folder-path {
+    flex: 1;
+    min-width: 0;
+    padding: 7px 10px;
+    border-radius: 6px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-card);
+    color: var(--text-primary);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.folder-path.invalid { border-color: var(--red); }

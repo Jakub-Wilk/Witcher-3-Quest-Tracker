@@ -21,7 +21,7 @@ pub fn Sidebar() -> Element {
             .map(|&t| {
                 let in_type = rows.iter().filter(|(q, _)| q.quest_type == t && view.matches_scope(q));
                 let (done, total) = in_type.fold((0, 0), |(d, n), (_, p)| {
-                    (d + usize::from(p.status == QuestStatus::Completed), n + 1)
+                    (d + usize::from(p.status() == QuestStatus::Completed), n + 1)
                 });
                 (t, done, total)
             })

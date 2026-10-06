@@ -1,14 +1,13 @@
 use std::collections::HashMap;
 
 use dioxus::prelude::*;
-use quest_db::QuestStatus;
-use quest_scraper::{Language, ScrapeProgress};
+use quest_scraper::ScrapeProgress;
 
 use super::{PlaythroughModal, QuestCard};
 use crate::state::{AppState, SyncStatus};
-use crate::sync_service::{fetch_remote, merge};
+use crate::sync_service::SyncPhase;
 
-/// Center panel: search, sync (with title language), and the filtered list of quest cards.
+/// Center panel: search, sync, and the filtered list of quest cards.
 #[component]
 pub fn QuestList() -> Element {
     let mut state = use_context::<AppState>();
@@ -16,13 +15,14 @@ pub fn QuestList() -> Element {
     let view = state.view.read().clone();
     let sync = state.sync.read().clone();
     let syncing = matches!(sync, SyncStatus::Running(_));
-    let language = *state.language.read();
     let current = *state.current.read();
+    let linked = state.playthroughs.read().iter().any(|p| Some(p.id) == current && p.link.is_some());
     let rows = state.rows.read();
 
-    let names: HashMap<i64, &str> = rows.iter().map(|(q, _)| (q.id, q.display_name())).collect();
+    let names: HashMap<i64, &str> = rows.iter().map(|(q, _)| (q.id, q.title.as_str())).collect();
     let visible = view.apply(&rows);
-    let visible_done = visible.iter().filter(|(_, p)| p.status == QuestStatus::Completed).count();
+    let visible_done =
+        visible.iter().filter(|(_, p)| p.status() == quest_db::QuestStatus::Completed).count();
     let visible_pct = if visible.is_empty() {
         0.0
     } else {
@@ -39,25 +39,11 @@ pub fn QuestList() -> Element {
                     value: "{view.search}",
                     oninput: move |e| state.view.write().search = e.value(),
                 }
-                select {
-                    class: "select",
-                    title: "Language of quest titles (applied on sync)",
-                    disabled: syncing,
-                    onchange: move |e| {
-                        if let Ok(lang) = e.value().parse::<Language>() {
-                            state.language.set(lang);
-                        }
-                    },
-                    for lang in Language::ALL {
-                        option { value: "{lang}", selected: lang == language, "{lang.native_label()}" }
-                    }
-                }
                 button {
                     class: "btn btn-primary",
                     disabled: syncing,
-                    onclick: move |_| {
-                        spawn(run_sync(state, language));
-                    },
+                    title: "Read the quest list from the game files, then add wiki data",
+                    onclick: move |_| state.start_sync(),
                     if syncing {
                         span { class: "spinner" }
                         "Syncing…"
@@ -67,8 +53,8 @@ pub fn QuestList() -> Element {
                 }
             }
             match &sync {
-                SyncStatus::Running(progress) => rsx! {
-                    div { class: "sync-status", {progress_text(*progress)} }
+                SyncStatus::Running(phase) => rsx! {
+                    div { class: "sync-status", {phase_text(*phase)} }
                 },
                 SyncStatus::Done(msg) => rsx! {
                     div { class: "sync-status sync-ok", "{msg}" }
@@ -83,13 +69,16 @@ pub fn QuestList() -> Element {
                 if current.is_none() {
                     div { class: "empty",
                         h2 { "No playthrough yet" }
-                        p { "Create a playthrough to start tracking your progress." }
+                        p {
+                            "Playthroughs are created automatically when a save of a new game is found, "
+                            "or you can create one yourself."
+                        }
                         button { class: "btn btn-primary", onclick: move |_| show_modal.set(true), "+ New Playthrough" }
                     }
                 } else if rows.is_empty() {
                     div { class: "empty",
                         h2 { "No quests yet" }
-                        p { "Click " strong { "Sync Quests" } " to download quest data from the Witcher wiki." }
+                        p { "Click " strong { "Sync Quests" } " to read the quest list from your game files." }
                     }
                 } else if visible.is_empty() {
                     div { class: "empty", p { "No quests match the current filters." } }
@@ -100,6 +89,7 @@ pub fn QuestList() -> Element {
                             quest: quest.clone(),
                             progress: progress.clone(),
                             cutoff_name: quest.cutoff_quest_id.and_then(|id| names.get(&id)).map(|n| n.to_string()),
+                            save_synced: linked && quest.is_trackable(),
                         }
                     }
                 }
@@ -116,43 +106,16 @@ pub fn QuestList() -> Element {
     }
 }
 
-fn progress_text(progress: ScrapeProgress) -> String {
-    match progress {
-        ScrapeProgress::ListingCategories => "Listing wiki categories…".into(),
-        ScrapeProgress::FetchingPages { done, total } => format!("Fetching quest pages: {done}/{total}"),
-        ScrapeProgress::Translating { done, total } => format!("Fetching translated titles: {done}/{total}"),
-    }
-}
-
-/// Scrapes the wiki, then merges into the DB. The DB is untouched if scraping fails.
-async fn run_sync(mut state: AppState, language: Language) {
-    let mut sync = state.sync;
-    sync.set(SyncStatus::Running(ScrapeProgress::ListingCategories));
-
-    let scrape = match fetch_remote(language, move |p| sync.set(SyncStatus::Running(p))).await {
-        Ok(scrape) => scrape,
-        Err(e) => {
-            tracing::error!("Sync failed: {e}");
-            sync.set(SyncStatus::Failed(e));
-            return;
+pub fn phase_text(phase: SyncPhase) -> String {
+    match phase {
+        SyncPhase::ReadingGame => "Reading quests from the game files…".into(),
+        SyncPhase::Wiki(ScrapeProgress::ListingCategories) => "Listing wiki categories…".into(),
+        SyncPhase::Wiki(ScrapeProgress::FetchingPages { done, total }) => {
+            format!("Fetching wiki pages: {done}/{total}")
         }
-    };
-    for (title, reason) in &scrape.skipped {
-        tracing::info!("Skipped '{title}': {reason}");
-    }
-
-    let merged = {
-        let mut conn = state.db.write();
-        merge(&mut conn, &scrape)
-    };
-    match merged {
-        Ok(report) => {
-            for title in &report.unresolved {
-                tracing::debug!("Unresolved quest link: {title}");
-            }
-            sync.set(SyncStatus::Done(report.summary()));
-            state.reload();
+        SyncPhase::Wiki(ScrapeProgress::Translating { done, total }) => {
+            format!("Fetching wiki translations: {done}/{total}")
         }
-        Err(e) => sync.set(SyncStatus::Failed(e.to_string())),
+        SyncPhase::Merging => "Saving…".into(),
     }
 }

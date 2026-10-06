@@ -4,37 +4,40 @@ use chrono::{DateTime, Utc};
 
 use crate::models::Quest;
 
-/// Quest columns, aliased as `q`, in the order expected by [`map_quest`].
-pub(crate) const QUEST_COLUMNS: &str = "q.id, q.wiki_page_id, q.wiki_title, q.name, q.localized_name,
-    q.source, q.quest_type, q.region, q.recommended_level, q.sort_order, q.description,
-    q.important_notes, q.is_unmarked, q.cutoff_quest_id, q.created_at, q.updated_at";
+/// Quest columns, in the order expected by [`map_quest`]. Title and description come from the
+/// `:lang` text row, falling back to English and then to the internal name.
+pub(crate) const QUEST_COLUMNS: &str = "q.id, q.journal_path, q.base_name, q.source, q.quest_type,
+    q.region, q.recommended_level, q.sort_order, q.wiki_page_id, q.wiki_title, q.important_notes,
+    q.is_unmarked, q.cutoff_quest_id,
+    COALESCE(t.title, te.title, q.base_name), COALESCE(t.description, te.description)";
 
 /// Number of columns in [`QUEST_COLUMNS`]; columns selected after them start at this index.
-pub(crate) const QUEST_COLUMN_COUNT: usize = 16;
+pub(crate) const QUEST_COLUMN_COUNT: usize = 15;
+
+/// `FROM` clause for [`QUEST_COLUMNS`]; binds the `:lang` named parameter.
+pub(crate) const QUEST_FROM: &str = "FROM quests q
+    LEFT JOIN quest_texts t  ON t.quest_id = q.id AND t.language = :lang
+    LEFT JOIN quest_texts te ON te.quest_id = q.id AND te.language = 'en'";
 
 /// Maps the leading [`QUEST_COLUMNS`] of a row. `prerequisite_ids` is left empty for the caller.
 pub(crate) fn map_quest(row: &rusqlite::Row) -> rusqlite::Result<Quest> {
-    let created_at: String = row.get(14)?;
-    let updated_at: String = row.get(15)?;
-
     Ok(Quest {
         id: row.get(0)?,
-        wiki_page_id: row.get(1)?,
-        wiki_title: row.get(2)?,
-        name: row.get(3)?,
-        localized_name: row.get(4)?,
-        source: row.get(5)?,
-        quest_type: row.get(6)?,
-        region: row.get(7)?,
-        recommended_level: row.get(8)?,
-        sort_order: row.get(9)?,
-        description: row.get(10)?,
-        important_notes: row.get(11)?,
-        is_unmarked: row.get(12)?,
-        cutoff_quest_id: row.get(13)?,
+        journal_path: row.get(1)?,
+        base_name: row.get(2)?,
+        source: row.get(3)?,
+        quest_type: row.get(4)?,
+        region: row.get(5)?,
+        recommended_level: row.get(6)?,
+        sort_order: row.get(7)?,
+        wiki_page_id: row.get(8)?,
+        wiki_title: row.get(9)?,
+        important_notes: row.get(10)?,
+        is_unmarked: row.get(11)?,
+        cutoff_quest_id: row.get(12)?,
         prerequisite_ids: Vec::new(),
-        created_at: parse_timestamp(&created_at, "created_at")?,
-        updated_at: parse_timestamp(&updated_at, "updated_at")?,
+        title: row.get(13)?,
+        description: row.get(14)?,
     })
 }
 

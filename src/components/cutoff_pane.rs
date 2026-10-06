@@ -18,16 +18,16 @@ pub fn CutoffPane() -> Element {
     let mut impending: BTreeMap<(i32, &str, i64), Vec<&str>> = BTreeMap::new();
     let mut missed: Vec<(&str, &str)> = Vec::new();
 
-    for (quest, _) in rows.iter().filter(|(_, p)| is_open(p.status)) {
+    for (quest, _) in rows.iter().filter(|(_, p)| is_open(p.status())) {
         let Some((cutoff, cutoff_progress)) = quest.cutoff_quest_id.and_then(|id| by_id.get(&id)).map(|r| (&r.0, &r.1))
         else {
             continue;
         };
-        if is_open(cutoff_progress.status) {
-            let key = (cutoff.sort_order.unwrap_or(i32::MAX), cutoff.display_name(), cutoff.id);
-            impending.entry(key).or_default().push(quest.display_name());
+        if is_open(cutoff_progress.status()) {
+            let key = (cutoff.sort_order.unwrap_or(i32::MAX), cutoff.title.as_str(), cutoff.id);
+            impending.entry(key).or_default().push(quest.title.as_str());
         } else {
-            missed.push((quest.display_name(), cutoff.display_name()));
+            missed.push((quest.title.as_str(), cutoff.title.as_str()));
         }
     }
 

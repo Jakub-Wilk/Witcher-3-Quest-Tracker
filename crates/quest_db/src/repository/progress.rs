@@ -1,102 +1,62 @@
+use std::collections::HashMap;
+
 use chrono::Utc;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, named_params, params};
 
 use super::quests::all_prerequisites;
-use super::util::{QUEST_COLUMNS, QUEST_COLUMN_COUNT, map_quest, parse_optional_timestamp, parse_timestamp};
-use crate::error::{QuestTrackerError, Result};
-use crate::models::{
-    CompletionSummary, NewQuestProgress, ProgressFilter, Quest, QuestProgress,
-    QuestProgressUpdate, QuestStatus,
-};
+use super::util::{QUEST_COLUMNS, QUEST_COLUMN_COUNT, QUEST_FROM, map_quest, parse_optional_timestamp};
+use crate::error::Result;
+use crate::models::{CompletionSummary, Quest, QuestProgress, QuestStatus};
 
-/// Inserts or updates progress for a quest within a playthrough.
-pub fn upsert(conn: &Connection, p: &NewQuestProgress) -> Result<()> {
-    conn.execute(
-        "INSERT INTO quest_progress (
-            playthrough_id, quest_id, status, notes, started_at, completed_at
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-         ON CONFLICT(playthrough_id, quest_id) DO UPDATE SET
-            status = EXCLUDED.status,
-            notes = EXCLUDED.notes,
-            started_at = EXCLUDED.started_at,
-            completed_at = EXCLUDED.completed_at",
-        params![
-            p.playthrough_id,
-            p.quest_id,
-            p.status,
-            p.notes,
-            p.started_at,
-            p.completed_at,
-        ],
-    )?;
-    Ok(())
+/// SQL expression for the effective status of a `quest_progress` row aliased `qp`.
+const EFFECTIVE: &str = "COALESCE(qp.manual_status, qp.save_status, 'NotStarted')";
+
+/// Progress of one quest, if anything was ever recorded for it.
+pub fn get(conn: &Connection, playthrough_id: i64, quest_id: i64) -> Result<Option<QuestProgress>> {
+    conn.query_row(
+        "SELECT playthrough_id, quest_id, manual_status, save_status, notes, completed_at
+         FROM quest_progress WHERE playthrough_id = ?1 AND quest_id = ?2",
+        params![playthrough_id, quest_id],
+        |row| {
+            Ok(QuestProgress {
+                playthrough_id: row.get(0)?,
+                quest_id: row.get(1)?,
+                manual_status: row.get(2)?,
+                save_status: row.get(3)?,
+                notes: row.get(4)?,
+                completed_at: parse_optional_timestamp(row.get(5)?, "completed_at")?,
+            })
+        },
+    )
+    .optional()
+    .map_err(Into::into)
 }
 
-/// Retrieves progress for a specific quest in a specific playthrough.
-/// Returns `QuestTrackerError::ProgressNotFound` if no row exists yet.
-pub fn get(conn: &Connection, playthrough_id: i64, quest_id: i64) -> Result<QuestProgress> {
-    let mut stmt = conn.prepare(
-        "SELECT id, playthrough_id, quest_id, status, notes, started_at, completed_at,
-                created_at, updated_at
-         FROM quest_progress
-         WHERE playthrough_id = ?1 AND quest_id = ?2",
-    )?;
-
-    stmt.query_row(params![playthrough_id, quest_id], map_progress_row)
-        .optional()?
-        .ok_or(QuestTrackerError::ProgressNotFound {
-            playthrough_id,
-            quest_id,
-        })
-}
-
-/// Lists all quests and their progress for a given playthrough matching the filter criteria.
-/// Quests without an explicit progress record are reported as `NotStarted`.
+/// Every quest with its progress in a playthrough (default progress where nothing is recorded),
+/// in story order, with text in `language`.
 pub fn list_for_playthrough(
     conn: &Connection,
     playthrough_id: i64,
-    filter: &ProgressFilter,
+    language: &str,
 ) -> Result<Vec<(Quest, QuestProgress)>> {
-    let mut query = format!(
-        "SELECT {QUEST_COLUMNS},
-                qp.id, COALESCE(qp.status, 'NotStarted'),
-                qp.notes, qp.started_at, qp.completed_at, qp.created_at, qp.updated_at
-         FROM quests q
-         LEFT JOIN quest_progress qp ON q.id = qp.quest_id AND qp.playthrough_id = ?1
-         WHERE 1=1"
-    );
-
-    let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(playthrough_id)];
-
-    if let Some(ref status) = filter.status {
-        param_values.push(Box::new(*status));
-        query.push_str(&format!(
-            " AND COALESCE(qp.status, 'NotStarted') = ?{}",
-            param_values.len()
-        ));
-    }
-    if let Some(ref source) = filter.source {
-        param_values.push(Box::new(*source));
-        query.push_str(&format!(" AND q.source = ?{}", param_values.len()));
-    }
-    if let Some(ref quest_type) = filter.quest_type {
-        param_values.push(Box::new(*quest_type));
-        query.push_str(&format!(" AND q.quest_type = ?{}", param_values.len()));
-    }
-    if let Some(ref region) = filter.region {
-        param_values.push(Box::new(*region));
-        query.push_str(&format!(" AND q.region = ?{}", param_values.len()));
-    }
-
-    query.push_str(" ORDER BY q.sort_order ASC, q.name ASC");
-
-    let mut stmt = conn.prepare(&query)?;
-    let params_slice: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
-
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {QUEST_COLUMNS}, qp.manual_status, qp.save_status, qp.notes, qp.completed_at
+         {QUEST_FROM}
+         LEFT JOIN quest_progress qp ON qp.quest_id = q.id AND qp.playthrough_id = :pt
+         ORDER BY q.sort_order ASC, q.base_name ASC"
+    ))?;
+    let base = QUEST_COLUMN_COUNT;
     let mut results = stmt
-        .query_map(params_slice.as_slice(), |row| {
+        .query_map(named_params! { ":lang": language, ":pt": playthrough_id }, |row| {
             let quest = map_quest(row)?;
-            let progress = map_progress_part(row, playthrough_id, quest.id)?;
+            let progress = QuestProgress {
+                playthrough_id,
+                quest_id: quest.id,
+                manual_status: row.get(base)?,
+                save_status: row.get(base + 1)?,
+                notes: row.get(base + 2)?,
+                completed_at: parse_optional_timestamp(row.get(base + 3)?, "completed_at")?,
+            };
             Ok((quest, progress))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -108,64 +68,144 @@ pub fn list_for_playthrough(
     Ok(results)
 }
 
-/// Partially updates progress for a quest in a playthrough. Creates a progress entry if none exists.
-pub fn update_status(
+/// Sets or clears (`None`: follow the save again) the user's status for a quest.
+pub fn set_manual_status(
     conn: &Connection,
     playthrough_id: i64,
     quest_id: i64,
-    update: &QuestProgressUpdate,
+    status: Option<QuestStatus>,
 ) -> Result<()> {
-    let current = get(conn, playthrough_id, quest_id).ok();
-
-    let new_status = update.status.unwrap_or_else(|| {
-        current
-            .as_ref()
-            .map(|c| c.status)
-            .unwrap_or(QuestStatus::NotStarted)
-    });
-
-    let new_notes = match &update.notes {
-        Some(inner) => inner.clone(),
-        None => current.as_ref().and_then(|c| c.notes.clone()),
-    };
-
-    let new_started_at = match &update.started_at {
-        Some(inner) => *inner,
-        None => current.as_ref().and_then(|c| c.started_at),
-    };
-
-    let new_completed_at = match &update.completed_at {
-        Some(inner) => *inner,
-        None => current.as_ref().and_then(|c| c.completed_at),
-    };
-
-    upsert(
-        conn,
-        &NewQuestProgress {
-            playthrough_id,
-            quest_id,
-            status: new_status,
-            notes: new_notes,
-            started_at: new_started_at,
-            completed_at: new_completed_at,
-        },
-    )
+    conn.execute(
+        "INSERT INTO quest_progress (playthrough_id, quest_id, manual_status) VALUES (?1, ?2, ?3)
+         ON CONFLICT(playthrough_id, quest_id) DO UPDATE SET manual_status = EXCLUDED.manual_status",
+        params![playthrough_id, quest_id, status],
+    )?;
+    refresh_completed_at(conn, playthrough_id, Some(quest_id))
 }
 
-/// Generates aggregate completion stats for a given playthrough.
-pub fn completion_summary(conn: &Connection, playthrough_id: i64) -> Result<CompletionSummary> {
-    let mut stmt = conn.prepare(
-        "SELECT
-            COUNT(q.id) AS total_quests,
-            COALESCE(SUM(CASE WHEN COALESCE(qp.status, 'NotStarted') = 'NotStarted' THEN 1 ELSE 0 END), 0) AS not_started,
-            COALESCE(SUM(CASE WHEN qp.status = 'InProgress' THEN 1 ELSE 0 END), 0) AS in_progress,
-            COALESCE(SUM(CASE WHEN qp.status = 'Completed' THEN 1 ELSE 0 END), 0) AS completed,
-            COALESCE(SUM(CASE WHEN qp.status = 'Failed' THEN 1 ELSE 0 END), 0) AS failed
-         FROM quests q
-         LEFT JOIN quest_progress qp ON q.id = qp.quest_id AND qp.playthrough_id = ?1",
+/// Sets or clears the user's notes for a quest.
+pub fn set_notes(
+    conn: &Connection,
+    playthrough_id: i64,
+    quest_id: i64,
+    notes: Option<&str>,
+) -> Result<()> {
+    conn.execute(
+        "INSERT INTO quest_progress (playthrough_id, quest_id, notes) VALUES (?1, ?2, ?3)
+         ON CONFLICT(playthrough_id, quest_id) DO UPDATE SET notes = EXCLUDED.notes",
+        params![playthrough_id, quest_id, notes],
     )?;
+    Ok(())
+}
 
-    stmt.query_row(params![playthrough_id], |row| {
+/// Outcome of [`apply_save_statuses`].
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct SaveApplyReport {
+    /// Quests whose save status changed.
+    pub changed: usize,
+    /// Quests whose save status went backwards (e.g. Completed to InProgress), as after loading
+    /// an older save.
+    pub reverted: Vec<i64>,
+}
+
+/// Replaces the save-derived status of every quest in a playthrough: quests in `statuses` get
+/// that status, all others `NotStarted`. Manual statuses and notes are untouched. Run it inside
+/// a transaction.
+pub fn apply_save_statuses(
+    conn: &Connection,
+    playthrough_id: i64,
+    statuses: &HashMap<i64, QuestStatus>,
+) -> Result<SaveApplyReport> {
+    let previous: HashMap<i64, Option<QuestStatus>> = {
+        let mut stmt = conn.prepare(
+            "SELECT q.id, qp.save_status FROM quests q
+             LEFT JOIN quest_progress qp ON qp.quest_id = q.id AND qp.playthrough_id = ?1",
+        )?;
+        let rows = stmt.query_map(params![playthrough_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        rows.collect::<rusqlite::Result<_>>()?
+    };
+
+    let mut report = SaveApplyReport::default();
+    let mut stmt = conn.prepare(
+        "INSERT INTO quest_progress (playthrough_id, quest_id, save_status) VALUES (?1, ?2, ?3)
+         ON CONFLICT(playthrough_id, quest_id) DO UPDATE SET save_status = EXCLUDED.save_status",
+    )?;
+    for (&quest_id, &old) in &previous {
+        let new = statuses.get(&quest_id).copied().unwrap_or(QuestStatus::NotStarted);
+        if old == Some(new) {
+            continue;
+        }
+        stmt.execute(params![playthrough_id, quest_id, new])?;
+        report.changed += 1;
+        if old.is_some_and(|old| rank(new) < rank(old)) {
+            report.reverted.push(quest_id);
+        }
+    }
+    report.reverted.sort_unstable();
+    refresh_completed_at(conn, playthrough_id, None)?;
+    Ok(report)
+}
+
+/// Clears the user's statuses on quests saves can report (journal quests), so a playthrough
+/// newly linked to its saves shows exactly what the saves say. Notes stay.
+pub fn clear_manual_statuses_of_trackable(conn: &Connection, playthrough_id: i64) -> Result<()> {
+    conn.execute(
+        &format!(
+            "UPDATE quest_progress SET manual_status = NULL
+             WHERE playthrough_id = ?1 AND quest_id IN
+                (SELECT id FROM quests WHERE journal_path NOT LIKE '{}%')",
+            crate::models::WIKI_ONLY_PREFIX
+        ),
+        params![playthrough_id],
+    )?;
+    refresh_completed_at(conn, playthrough_id, None)
+}
+
+/// Forgets all save-derived statuses of a playthrough (when it is unlinked from its saves).
+pub fn clear_save_statuses(conn: &Connection, playthrough_id: i64) -> Result<()> {
+    conn.execute(
+        "UPDATE quest_progress SET save_status = NULL WHERE playthrough_id = ?1",
+        params![playthrough_id],
+    )?;
+    refresh_completed_at(conn, playthrough_id, None)
+}
+
+/// How far along a status is; used to detect statuses going backwards.
+fn rank(status: QuestStatus) -> u8 {
+    match status {
+        QuestStatus::NotStarted => 0,
+        QuestStatus::InProgress => 1,
+        QuestStatus::Completed | QuestStatus::Failed => 2,
+    }
+}
+
+/// Stamps `completed_at` on rows whose effective status just became Completed and clears it on
+/// rows that are no longer Completed.
+fn refresh_completed_at(conn: &Connection, playthrough_id: i64, quest_id: Option<i64>) -> Result<()> {
+    conn.execute(
+        &format!(
+            "UPDATE quest_progress AS qp SET completed_at =
+                CASE WHEN {EFFECTIVE} = 'Completed' THEN COALESCE(qp.completed_at, ?3) ELSE NULL END
+             WHERE qp.playthrough_id = ?1 AND (?2 IS NULL OR qp.quest_id = ?2)"
+        ),
+        params![playthrough_id, quest_id, Utc::now().to_rfc3339()],
+    )?;
+    Ok(())
+}
+
+/// Aggregate completion counts for a playthrough, by effective status.
+pub fn completion_summary(conn: &Connection, playthrough_id: i64) -> Result<CompletionSummary> {
+    let sql = format!(
+        "SELECT
+            COUNT(q.id),
+            COALESCE(SUM({EFFECTIVE} = 'NotStarted'), 0),
+            COALESCE(SUM({EFFECTIVE} = 'InProgress'), 0),
+            COALESCE(SUM({EFFECTIVE} = 'Completed'), 0),
+            COALESCE(SUM({EFFECTIVE} = 'Failed'), 0)
+         FROM quests q
+         LEFT JOIN quest_progress qp ON q.id = qp.quest_id AND qp.playthrough_id = ?1"
+    );
+    conn.query_row(&sql, params![playthrough_id], |row| {
         Ok(CompletionSummary {
             total_quests: row.get(0)?,
             not_started: row.get(1)?,
@@ -177,47 +217,6 @@ pub fn completion_summary(conn: &Connection, playthrough_id: i64) -> Result<Comp
     .map_err(Into::into)
 }
 
-fn map_progress_row(row: &rusqlite::Row) -> rusqlite::Result<QuestProgress> {
-    let created_at: String = row.get(7)?;
-    let updated_at: String = row.get(8)?;
-
-    Ok(QuestProgress {
-        id: row.get(0)?,
-        playthrough_id: row.get(1)?,
-        quest_id: row.get(2)?,
-        status: row.get(3)?,
-        notes: row.get(4)?,
-        started_at: parse_optional_timestamp(row.get(5)?, "started_at")?,
-        completed_at: parse_optional_timestamp(row.get(6)?, "completed_at")?,
-        created_at: parse_timestamp(&created_at, "created_at")?,
-        updated_at: parse_timestamp(&updated_at, "updated_at")?,
-    })
-}
-
-/// Maps the progress columns that follow the quest columns in `list_for_playthrough`.
-/// Quests without a progress row get a synthetic `NotStarted` entry with id 0.
-fn map_progress_part(
-    row: &rusqlite::Row,
-    playthrough_id: i64,
-    quest_id: i64,
-) -> rusqlite::Result<QuestProgress> {
-    let base = QUEST_COLUMN_COUNT;
-    let progress_id: Option<i64> = row.get(base)?;
-    let now = Utc::now();
-
-    Ok(QuestProgress {
-        id: progress_id.unwrap_or(0),
-        playthrough_id,
-        quest_id,
-        status: row.get(base + 1)?,
-        notes: row.get(base + 2)?,
-        started_at: parse_optional_timestamp(row.get(base + 3)?, "started_at")?,
-        completed_at: parse_optional_timestamp(row.get(base + 4)?, "completed_at")?,
-        created_at: parse_optional_timestamp(row.get(base + 5)?, "created_at")?.unwrap_or(now),
-        updated_at: parse_optional_timestamp(row.get(base + 6)?, "updated_at")?.unwrap_or(now),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,93 +224,101 @@ mod tests {
     use crate::models::{Difficulty, NewPlaythrough};
     use crate::repository::{playthroughs, quests};
 
-    #[test]
-    fn test_summary_with_no_quests_is_all_zero() {
-        // SUM over zero rows is NULL in SQL; a fresh DB (no sync yet) must still work.
-        let conn = open_in_memory().unwrap();
-        let pt_id = playthroughs::insert(
-            &conn,
+    fn playthrough(conn: &Connection) -> i64 {
+        playthroughs::insert(
+            conn,
             &NewPlaythrough {
-                name: "Fresh".into(),
+                name: "Run".into(),
                 difficulty: Difficulty::DeathMarch,
                 is_new_game_plus: false,
                 notes: None,
+                link: None,
             },
         )
-        .unwrap();
-        assert_eq!(completion_summary(&conn, pt_id).unwrap(), CompletionSummary::default());
+        .unwrap()
     }
 
     #[test]
-    fn test_progress_tracking_and_summary() {
+    fn summary_with_no_quests_is_all_zero() {
+        // SUM over zero rows is NULL in SQL; a fresh DB (no sync yet) must still work.
         let conn = open_in_memory().unwrap();
+        let pt = playthrough(&conn);
+        assert_eq!(completion_summary(&conn, pt).unwrap(), CompletionSummary::default());
+    }
 
-        let pt_id = playthroughs::insert(
+    #[test]
+    fn manual_status_wins_over_save_status() {
+        let conn = open_in_memory().unwrap();
+        let pt = playthrough(&conn);
+        let (a, _) = quests::upsert(&conn, &quests::tests::sample("Lilac and Gooseberries", 1)).unwrap();
+        let (b, _) = quests::upsert(&conn, &quests::tests::sample("Devil by the Well", 2)).unwrap();
+
+        apply_save_statuses(&conn, pt, &HashMap::from([(a, QuestStatus::InProgress)])).unwrap();
+        set_manual_status(&conn, pt, a, Some(QuestStatus::Completed)).unwrap();
+        let p = get(&conn, pt, a).unwrap().unwrap();
+        assert_eq!(p.status(), QuestStatus::Completed);
+        assert!(p.overrides_save());
+        assert!(p.completed_at.is_some());
+
+        // Clearing the manual status follows the save again.
+        set_manual_status(&conn, pt, a, None).unwrap();
+        let p = get(&conn, pt, a).unwrap().unwrap();
+        assert_eq!(p.status(), QuestStatus::InProgress);
+        assert!(p.completed_at.is_none());
+
+        let summary = completion_summary(&conn, pt).unwrap();
+        assert_eq!((summary.total_quests, summary.in_progress, summary.not_started), (2, 1, 1));
+
+        let list = list_for_playthrough(&conn, pt, "en").unwrap();
+        assert_eq!(list.len(), 2);
+        let row_b = list.iter().find(|(q, _)| q.id == b).unwrap();
+        assert_eq!(row_b.1.status(), QuestStatus::NotStarted);
+    }
+
+    #[test]
+    fn applying_saves_reports_changes_and_reverts() {
+        let conn = open_in_memory().unwrap();
+        let pt = playthrough(&conn);
+        let (a, _) = quests::upsert(&conn, &quests::tests::sample("A", 1)).unwrap();
+        let (b, _) = quests::upsert(&conn, &quests::tests::sample("B", 2)).unwrap();
+
+        let first = apply_save_statuses(
             &conn,
-            &NewPlaythrough {
-                name: "Playthrough 1".into(),
-                difficulty: Difficulty::StoryAndSword,
-                is_new_game_plus: false,
-                notes: None,
-            },
+            pt,
+            &HashMap::from([(a, QuestStatus::Completed), (b, QuestStatus::InProgress)]),
         )
         .unwrap();
+        assert_eq!(first, SaveApplyReport { changed: 2, reverted: vec![] });
+        assert!(get(&conn, pt, a).unwrap().unwrap().completed_at.is_some());
 
-        let q1_id = quests::insert(&conn, &quests::tests::sample("Lilac and Gooseberries", 1)).unwrap();
-
-        let q2_id = quests::insert(&conn, &quests::tests::sample("Devil by the Well", 2)).unwrap();
-
-        // Initial summary check
-        let summary1 = completion_summary(&conn, pt_id).unwrap();
-        assert_eq!(summary1.total_quests, 2);
-        assert_eq!(summary1.not_started, 2);
-        assert_eq!(summary1.completed, 0);
-
-        // Complete quest 1
-        upsert(
+        // Same state again: nothing changes.
+        let same = apply_save_statuses(
             &conn,
-            &NewQuestProgress {
-                playthrough_id: pt_id,
-                quest_id: q1_id,
-                status: QuestStatus::Completed,
-                notes: Some("Met Yennefer".into()),
-                started_at: Some(Utc::now()),
-                completed_at: Some(Utc::now()),
-            },
+            pt,
+            &HashMap::from([(a, QuestStatus::Completed), (b, QuestStatus::InProgress)]),
         )
         .unwrap();
+        assert_eq!(same, SaveApplyReport::default());
 
-        // Start quest 2
-        update_status(
-            &conn,
-            pt_id,
-            q2_id,
-            &QuestProgressUpdate {
-                status: Some(QuestStatus::InProgress),
-                notes: Some(Some("Found the bracelet".into())),
-                ..Default::default()
-            },
-        )
-        .unwrap();
+        // An older save: A is back in progress, B not started yet.
+        let older = apply_save_statuses(&conn, pt, &HashMap::from([(a, QuestStatus::InProgress)])).unwrap();
+        assert_eq!(older, SaveApplyReport { changed: 2, reverted: vec![a, b] });
+        assert!(get(&conn, pt, a).unwrap().unwrap().completed_at.is_none());
 
-        let summary2 = completion_summary(&conn, pt_id).unwrap();
-        assert_eq!(summary2.total_quests, 2);
-        assert_eq!(summary2.not_started, 0);
-        assert_eq!(summary2.in_progress, 1);
-        assert_eq!(summary2.completed, 1);
+        clear_save_statuses(&conn, pt).unwrap();
+        assert_eq!(get(&conn, pt, a).unwrap().unwrap().status(), QuestStatus::NotStarted);
+    }
 
-        let list = list_for_playthrough(
-            &conn,
-            pt_id,
-            &ProgressFilter {
-                status: Some(QuestStatus::Completed),
-                ..Default::default()
-            },
-        )
-        .unwrap();
-
-        assert_eq!(list.len(), 1);
-        assert_eq!(list[0].0.id, q1_id);
-        assert_eq!(list[0].1.status, QuestStatus::Completed);
+    #[test]
+    fn notes_do_not_touch_status() {
+        let conn = open_in_memory().unwrap();
+        let pt = playthrough(&conn);
+        let (a, _) = quests::upsert(&conn, &quests::tests::sample("A", 1)).unwrap();
+        set_notes(&conn, pt, a, Some("Bring a crossbow")).unwrap();
+        let p = get(&conn, pt, a).unwrap().unwrap();
+        assert_eq!(p.notes.as_deref(), Some("Bring a crossbow"));
+        assert_eq!(p.manual_status, None);
+        set_notes(&conn, pt, a, None).unwrap();
+        assert_eq!(get(&conn, pt, a).unwrap().unwrap().notes, None);
     }
 }

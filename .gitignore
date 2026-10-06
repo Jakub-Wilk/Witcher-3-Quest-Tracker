@@ -1,1 +1,4 @@
 /target
+
+# Personal Witcher 3 saves used as local test fixtures (copied, never the live folder)
+crates/w3_formats/tests/fixtures/saves/

@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Playthrough difficulty level.
@@ -118,6 +118,26 @@ impl_sql_enum!(QuestStatus {
     Failed => "Failed",
 });
 
+/// Links a playthrough to a save-game lineage (every save of one in-game run).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SaveLink {
+    /// Packed time of the run's new-game event, shared by all of its saves.
+    pub lineage_root: i64,
+    /// `saveInfo.playthroughId` (game version 4.0 and later).
+    pub game_playthrough_id: Option<String>,
+    /// When the run was started, local time.
+    pub started_at: Option<NaiveDateTime>,
+}
+
+/// The newest save applied to a playthrough.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HeadSave {
+    /// Packed save time; orders saves chronologically.
+    pub key: i64,
+    pub file: String,
+    pub saved_at: Option<NaiveDateTime>,
+}
+
 /// Entity representing a game playthrough.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Playthrough {
@@ -126,6 +146,8 @@ pub struct Playthrough {
     pub difficulty: Difficulty,
     pub is_new_game_plus: bool,
     pub notes: Option<String>,
+    pub link: Option<SaveLink>,
+    pub head: Option<HeadSave>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -137,6 +159,7 @@ pub struct NewPlaythrough {
     pub difficulty: Difficulty,
     pub is_new_game_plus: bool,
     pub notes: Option<String>,
+    pub link: Option<SaveLink>,
 }
 
 /// DTO for updating an existing playthrough.
@@ -148,108 +171,94 @@ pub struct PlaythroughUpdate {
     pub notes: Option<Option<String>>,
 }
 
-/// Entity representing static quest reference data.
+/// A quest with its text in one language.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Quest {
     pub id: i64,
-    /// MediaWiki page id — the stable identity used by sync.
-    pub wiki_page_id: i64,
-    pub wiki_title: String,
-    pub name: String,
-    /// Title in the language chosen at the last sync, when that is not English.
-    pub localized_name: Option<String>,
+    /// Depot path of the quest's `.journal` file — the key save games use.
+    pub journal_path: String,
+    /// Internal name, e.g. `Q001 Dream`.
+    pub base_name: String,
     pub source: QuestSource,
     pub quest_type: QuestType,
     pub region: Region,
     pub recommended_level: Option<i32>,
     pub sort_order: Option<i32>,
-    pub description: Option<String>,
+    pub wiki_page_id: Option<i64>,
+    pub wiki_title: Option<String>,
     /// Missable-quest warnings, newline separated.
     pub important_notes: Option<String>,
     pub is_unmarked: bool,
     pub cutoff_quest_id: Option<i64>,
     pub prerequisite_ids: Vec<i64>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    /// Title in the requested language, falling back to English.
+    pub title: String,
+    /// Journal description in the requested language, falling back to English.
+    pub description: Option<String>,
 }
 
+/// `journal_path` prefix of quests known only from the wiki (no journal entry, so saves cannot
+/// report them), followed by the wiki page id.
+pub const WIKI_ONLY_PREFIX: &str = "wiki:";
+
 impl Quest {
-    /// The localized title if one was synced, otherwise the English name.
-    pub fn display_name(&self) -> &str {
-        self.localized_name.as_deref().unwrap_or(&self.name)
+    /// Whether saves can report this quest's status.
+    pub fn is_trackable(&self) -> bool {
+        !self.journal_path.starts_with(WIKI_ONLY_PREFIX)
     }
 }
 
-/// DTO for creating or updating a quest reference entry.
+/// A quest's text in one language.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QuestText {
+    pub language: String,
+    pub title: String,
+    pub description: Option<String>,
+}
+
+/// DTO for creating or updating a quest's static data. Cutoff, prerequisites and sort order are
+/// set separately once every quest has an id.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewQuest {
-    pub wiki_page_id: i64,
-    pub wiki_title: String,
-    pub name: String,
-    pub localized_name: Option<String>,
+    pub journal_path: String,
+    pub journal_guid: String,
+    pub base_name: String,
     pub source: QuestSource,
     pub quest_type: QuestType,
     pub region: Region,
     pub recommended_level: Option<i32>,
-    pub sort_order: Option<i32>,
-    pub description: Option<String>,
+    pub wiki_page_id: Option<i64>,
+    pub wiki_title: Option<String>,
     pub important_notes: Option<String>,
     pub is_unmarked: bool,
-    pub cutoff_quest_id: Option<i64>,
-    pub prerequisite_ids: Vec<i64>,
+    pub texts: Vec<QuestText>,
+    /// Further journal files that are part of this quest (see `quest_journals`).
+    pub extra_journal_paths: Vec<String>,
 }
 
-/// Filter criteria for querying quests.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct QuestFilter {
-    pub source: Option<QuestSource>,
-    pub quest_type: Option<QuestType>,
-    pub region: Option<Region>,
-    pub is_unmarked: Option<bool>,
-    pub max_recommended_level: Option<i32>,
-}
-
-/// Entity representing progress tracking of a quest for a specific playthrough.
+/// A quest's state within a playthrough.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QuestProgress {
-    pub id: i64,
     pub playthrough_id: i64,
     pub quest_id: i64,
-    pub status: QuestStatus,
+    /// Set by the user; wins over `save_status`.
+    pub manual_status: Option<QuestStatus>,
+    /// Read from the playthrough's newest save.
+    pub save_status: Option<QuestStatus>,
     pub notes: Option<String>,
-    pub started_at: Option<DateTime<Utc>>,
-    pub completed_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-/// DTO for creating or upserting quest progress.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NewQuestProgress {
-    pub playthrough_id: i64,
-    pub quest_id: i64,
-    pub status: QuestStatus,
-    pub notes: Option<String>,
-    pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
 }
 
-/// DTO for updating quest progress.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct QuestProgressUpdate {
-    pub status: Option<QuestStatus>,
-    pub notes: Option<Option<String>>,
-    pub started_at: Option<Option<DateTime<Utc>>>,
-    pub completed_at: Option<Option<DateTime<Utc>>>,
-}
+impl QuestProgress {
+    /// The status to show: the manual one if set, else the save's, else not started.
+    pub fn status(&self) -> QuestStatus {
+        self.manual_status.or(self.save_status).unwrap_or(QuestStatus::NotStarted)
+    }
 
-/// Filter criteria for progress queries within a playthrough.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProgressFilter {
-    pub status: Option<QuestStatus>,
-    pub source: Option<QuestSource>,
-    pub quest_type: Option<QuestType>,
-    pub region: Option<Region>,
+    /// Whether a manual status hides a different status read from the save.
+    pub fn overrides_save(&self) -> bool {
+        matches!((self.manual_status, self.save_status), (Some(m), Some(s)) if m != s)
+    }
 }
 
 /// Summary counts of quest progress for a playthrough.

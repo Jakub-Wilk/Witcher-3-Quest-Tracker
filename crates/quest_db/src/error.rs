@@ -19,14 +19,6 @@ pub enum QuestTrackerError {
     #[error("Quest not found: id={0}")]
     QuestNotFound(i64),
 
-    /// Returned when a quest is not found by name and expansion source.
-    #[error("Quest not found: name='{name}', source='{source_name}'")]
-    QuestNotFoundByName { name: String, source_name: String },
-
-    /// Returned when quest progress is not found for a playthrough and quest.
-    #[error("Quest progress not found for playthrough {playthrough_id} and quest {quest_id}")]
-    ProgressNotFound { playthrough_id: i64, quest_id: i64 },
-
     /// General invalid data error.
     #[error("Invalid data: {0}")]
     InvalidData(String),

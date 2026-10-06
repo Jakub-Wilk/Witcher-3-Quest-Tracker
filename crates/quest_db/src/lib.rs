@@ -7,4 +7,4 @@ pub use db::{open, open_in_memory};
 pub use rusqlite::Connection;
 pub use error::{QuestTrackerError, Result};
 pub use models::*;
-pub use repository::{playthroughs, progress, quests, settings};
+pub use repository::{playthroughs, progress, quests};
