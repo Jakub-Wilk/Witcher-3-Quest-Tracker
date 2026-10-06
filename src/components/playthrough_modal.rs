@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
-use quest_db::{Difficulty, NewPlaythrough, Playthrough, PlaythroughUpdate};
+use quest_db::{NewPlaythrough, Playthrough, PlaythroughUpdate};
 
-use super::{DIFFICULTIES, difficulty_label, format_local};
+use super::format_local;
 use crate::state::AppState;
 
 /// Modal form for creating a playthrough, or editing `existing` (with a delete option).
@@ -10,8 +10,6 @@ pub fn PlaythroughModal(existing: Option<Playthrough>, on_close: EventHandler<()
     let mut state = use_context::<AppState>();
     let initial = existing.clone();
     let mut name = use_signal(|| initial.as_ref().map(|p| p.name.clone()).unwrap_or_default());
-    let mut difficulty =
-        use_signal(|| initial.as_ref().map(|p| p.difficulty).unwrap_or(Difficulty::BloodAndBrokenBones));
     let mut ng_plus = use_signal(|| initial.as_ref().is_some_and(|p| p.is_new_game_plus));
     let mut notes = use_signal(|| initial.as_ref().and_then(|p| p.notes.clone()).unwrap_or_default());
     let mut confirm_delete = use_signal(|| false);
@@ -33,14 +31,12 @@ pub fn PlaythroughModal(existing: Option<Playthrough>, on_close: EventHandler<()
                 id,
                 PlaythroughUpdate {
                     name: Some(trimmed_name),
-                    difficulty: Some(difficulty()),
                     is_new_game_plus: Some(ng_plus()),
                     notes: Some(trimmed_notes),
                 },
             ),
             None => drop(state.create_playthrough(NewPlaythrough {
                 name: trimmed_name,
-                difficulty: difficulty(),
                 is_new_game_plus: ng_plus(),
                 notes: trimmed_notes,
                 link: None,
@@ -67,20 +63,6 @@ pub fn PlaythroughModal(existing: Option<Playthrough>, on_close: EventHandler<()
                         placeholder: "e.g. Death March run",
                         value: "{name}",
                         oninput: move |e| name.set(e.value()),
-                    }
-                }
-                label { class: "field",
-                    span { "Difficulty" }
-                    select {
-                        class: "select",
-                        onchange: move |e| {
-                            if let Ok(i) = e.value().parse::<usize>() {
-                                difficulty.set(DIFFICULTIES[i]);
-                            }
-                        },
-                        for (i, d) in DIFFICULTIES.iter().enumerate() {
-                            option { value: "{i}", selected: *d == difficulty(), "{difficulty_label(*d)}" }
-                        }
                     }
                 }
                 label { class: "field field-inline",

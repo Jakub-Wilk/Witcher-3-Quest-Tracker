@@ -221,7 +221,7 @@ pub fn completion_summary(conn: &Connection, playthrough_id: i64) -> Result<Comp
 mod tests {
     use super::*;
     use crate::db::open_in_memory;
-    use crate::models::{Difficulty, NewPlaythrough};
+    use crate::models::NewPlaythrough;
     use crate::repository::{playthroughs, quests};
 
     fn playthrough(conn: &Connection) -> i64 {
@@ -229,7 +229,6 @@ mod tests {
             conn,
             &NewPlaythrough {
                 name: "Run".into(),
-                difficulty: Difficulty::DeathMarch,
                 is_new_game_plus: false,
                 notes: None,
                 link: None,

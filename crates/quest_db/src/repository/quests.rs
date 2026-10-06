@@ -385,7 +385,7 @@ pub(crate) mod tests {
 
     #[test]
     fn delete_missing_keeps_quests_with_user_data() {
-        use crate::models::{Difficulty, NewPlaythrough, QuestStatus};
+        use crate::models::{NewPlaythrough, QuestStatus};
         use crate::repository::{playthroughs, progress};
 
         let conn = open_in_memory().unwrap();
@@ -396,7 +396,6 @@ pub(crate) mod tests {
             &conn,
             &NewPlaythrough {
                 name: "Run".into(),
-                difficulty: Difficulty::DeathMarch,
                 is_new_game_plus: false,
                 notes: None,
                 link: None,

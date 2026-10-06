@@ -20,7 +20,7 @@ pub use save_watcher::SaveWatcher;
 pub use settings_modal::SettingsModal;
 pub use sidebar::Sidebar;
 
-use quest_db::{Difficulty, QuestSource, QuestStatus, QuestType, Region};
+use quest_db::{QuestSource, QuestStatus, QuestType, Region};
 
 pub const SOURCES: [QuestSource; 3] =
     [QuestSource::BaseGame, QuestSource::HeartsOfStone, QuestSource::BloodAndWine];
@@ -31,14 +31,6 @@ pub const QUEST_TYPES: [QuestType; 5] = [
     QuestType::WitcherContract,
     QuestType::TreasureHunt,
     QuestType::ScavengerHunt,
-];
-
-pub const DIFFICULTIES: [Difficulty; 5] = [
-    Difficulty::JustTheStory,
-    Difficulty::StoryAndSword,
-    Difficulty::BloodAndBrokenBones,
-    Difficulty::DeathMarch,
-    Difficulty::Custom,
 ];
 
 pub fn source_label(source: QuestSource) -> &'static str {
@@ -70,16 +62,6 @@ pub fn region_label(region: Region) -> &'static str {
         Region::Vizima => "Vizima",
         Region::Toussaint => "Toussaint",
         Region::Unknown => "Unknown region",
-    }
-}
-
-pub fn difficulty_label(difficulty: Difficulty) -> &'static str {
-    match difficulty {
-        Difficulty::JustTheStory => "Just the Story",
-        Difficulty::StoryAndSword => "Story and Sword",
-        Difficulty::BloodAndBrokenBones => "Blood and Broken Bones!",
-        Difficulty::DeathMarch => "Death March!",
-        Difficulty::Custom => "Custom",
     }
 }
 

@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use quest_db::Playthrough;
 
-use super::{PlaythroughModal, SettingsModal, difficulty_label};
+use super::{PlaythroughModal, SettingsModal};
 use crate::settings::language_label;
 use crate::state::AppState;
 
@@ -75,7 +75,7 @@ pub fn Header() -> Element {
                             option {
                                 value: "{p.id}",
                                 selected: current == Some(p.id),
-                                "{p.name} — {difficulty_label(p.difficulty)}"
+                                "{p.name}"
                                 if p.is_new_game_plus { " (NG+)" }
                                 if p.link.is_some() { " ⛓" }
                             }

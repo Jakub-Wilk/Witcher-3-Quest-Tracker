@@ -280,7 +280,7 @@ mod tests {
     use std::collections::HashMap;
 
     use super::*;
-    use quest_db::{Difficulty, NewPlaythrough, NewQuest, QuestSource, QuestText, QuestType, Region, open_in_memory};
+    use quest_db::{NewPlaythrough, NewQuest, QuestSource, QuestText, QuestType, Region, open_in_memory};
     use w3_formats::HistoryRecord;
 
     const QUEST_A: &str = "gameplay\\journal\\quests\\a.journal";
@@ -330,7 +330,6 @@ mod tests {
             &conn,
             &NewPlaythrough {
                 name: "Run".into(),
-                difficulty: Difficulty::DeathMarch,
                 is_new_game_plus: false,
                 notes: None,
                 link: None,
@@ -472,7 +471,7 @@ mod tests {
         let saved = read(&fixture).unwrap();
         let pt = playthroughs::insert(
             &conn,
-            &NewPlaythrough { name: "2026".into(), difficulty: Difficulty::DeathMarch, is_new_game_plus: false, notes: None, link: None },
+            &NewPlaythrough { name: "2026".into(), is_new_game_plus: false, notes: None, link: None },
         )
         .unwrap();
         let run = DetectedRun { lineage_root: 0, started_at: None, game_playthrough_id: None, save_count: 1, newest: saved };

@@ -4,19 +4,18 @@ use super::util::parse_timestamp;
 use crate::error::{QuestTrackerError, Result};
 use crate::models::{HeadSave, NewPlaythrough, Playthrough, PlaythroughUpdate, SaveLink};
 
-const COLUMNS: &str = "id, name, difficulty, is_new_game_plus, notes, lineage_root,
+const COLUMNS: &str = "id, name, is_new_game_plus, notes, lineage_root,
     game_playthrough_id, started_at, head_save_key, head_save_file, head_saved_at, created_at,
     updated_at";
 
 /// Inserts a new playthrough and returns its id.
 pub fn insert(conn: &Connection, p: &NewPlaythrough) -> Result<i64> {
     conn.execute(
-        "INSERT INTO playthroughs (name, difficulty, is_new_game_plus, notes, lineage_root,
-                                   game_playthrough_id, started_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        "INSERT INTO playthroughs (name, is_new_game_plus, notes, lineage_root, game_playthrough_id,
+                                   started_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         params![
             p.name,
-            p.difficulty,
             p.is_new_game_plus,
             p.notes,
             p.link.as_ref().map(|l| l.lineage_root),
@@ -56,7 +55,6 @@ pub fn find_by_lineage(conn: &Connection, lineage_root: i64) -> Result<Option<Pl
 pub fn update(conn: &Connection, id: i64, update: &PlaythroughUpdate) -> Result<()> {
     let current = get(conn, id)?;
     let new_name = update.name.as_ref().unwrap_or(&current.name);
-    let new_difficulty = update.difficulty.unwrap_or(current.difficulty);
     let new_is_ngp = update.is_new_game_plus.unwrap_or(current.is_new_game_plus);
     let new_notes = match &update.notes {
         Some(inner) => inner.clone(),
@@ -64,9 +62,9 @@ pub fn update(conn: &Connection, id: i64, update: &PlaythroughUpdate) -> Result<
     };
     conn.execute(
         "UPDATE playthroughs
-         SET name = ?1, difficulty = ?2, is_new_game_plus = ?3, notes = ?4
-         WHERE id = ?5",
-        params![new_name, new_difficulty, new_is_ngp, new_notes, id],
+         SET name = ?1, is_new_game_plus = ?2, notes = ?3
+         WHERE id = ?4",
+        params![new_name, new_is_ngp, new_notes, id],
     )?;
     Ok(())
 }
@@ -138,29 +136,28 @@ pub fn clear_ignored_lineages(conn: &Connection) -> Result<()> {
 }
 
 fn map_row(row: &rusqlite::Row) -> rusqlite::Result<Playthrough> {
-    let lineage_root: Option<i64> = row.get(5)?;
-    let head_key: Option<i64> = row.get(8)?;
-    let created_at: String = row.get(11)?;
-    let updated_at: String = row.get(12)?;
+    let lineage_root: Option<i64> = row.get(4)?;
+    let head_key: Option<i64> = row.get(7)?;
+    let created_at: String = row.get(10)?;
+    let updated_at: String = row.get(11)?;
     Ok(Playthrough {
         id: row.get(0)?,
         name: row.get(1)?,
-        difficulty: row.get(2)?,
-        is_new_game_plus: row.get(3)?,
-        notes: row.get(4)?,
+        is_new_game_plus: row.get(2)?,
+        notes: row.get(3)?,
         link: match lineage_root {
             Some(lineage_root) => Some(SaveLink {
                 lineage_root,
-                game_playthrough_id: row.get(6)?,
-                started_at: row.get(7)?,
+                game_playthrough_id: row.get(5)?,
+                started_at: row.get(6)?,
             }),
             None => None,
         },
         head: match head_key {
             Some(key) => Some(HeadSave {
                 key,
-                file: row.get::<_, Option<String>>(9)?.unwrap_or_default(),
-                saved_at: row.get(10)?,
+                file: row.get::<_, Option<String>>(8)?.unwrap_or_default(),
+                saved_at: row.get(9)?,
             }),
             None => None,
         },
@@ -175,12 +172,10 @@ mod tests {
 
     use super::*;
     use crate::db::open_in_memory;
-    use crate::models::Difficulty;
 
     fn new(name: &str, link: Option<SaveLink>) -> NewPlaythrough {
         NewPlaythrough {
             name: name.into(),
-            difficulty: Difficulty::DeathMarch,
             is_new_game_plus: false,
             notes: Some("Planning to 100% all Gwent cards".into()),
             link,

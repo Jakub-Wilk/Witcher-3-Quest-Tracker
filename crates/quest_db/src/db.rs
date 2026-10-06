@@ -36,6 +36,7 @@ fn migrations() -> Migrations<'static> {
     Migrations::new(vec![
         M::up(include_str!("../migrations/001_create_tables.sql")),
         M::up(include_str!("../migrations/002_quest_journals.sql")),
+        M::up(include_str!("../migrations/003_drop_difficulty.sql")),
     ])
 }
 
@@ -46,6 +47,25 @@ mod tests {
     #[test]
     fn test_migrations_valid() {
         assert!(migrations().validate().is_ok());
+    }
+
+    #[test]
+    fn test_drop_difficulty_keeps_playthroughs() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        configure_pragmas(&conn).unwrap();
+        migrations().to_version(&mut conn, 2).unwrap();
+        conn.execute("INSERT INTO playthroughs (name, difficulty) VALUES ('Run', 'DeathMarch')", [])
+            .unwrap();
+        migrations().to_latest(&mut conn).unwrap();
+
+        let name: String = conn.query_row("SELECT name FROM playthroughs", [], |r| r.get(0)).unwrap();
+        assert_eq!(name, "Run");
+        // The recreated trigger still stamps updated_at.
+        conn.execute("UPDATE playthroughs SET updated_at = 'old'", []).unwrap();
+        conn.execute("UPDATE playthroughs SET name = 'Renamed'", []).unwrap();
+        let updated_at: String =
+            conn.query_row("SELECT updated_at FROM playthroughs", [], |r| r.get(0)).unwrap();
+        assert_ne!(updated_at, "old");
     }
 
     #[test]

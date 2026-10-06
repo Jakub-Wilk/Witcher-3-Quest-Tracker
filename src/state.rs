@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use dioxus::prelude::*;
 use quest_db::{
-    CompletionSummary, Connection, Difficulty, NewPlaythrough, Playthrough, PlaythroughUpdate, Quest,
+    CompletionSummary, Connection, NewPlaythrough, Playthrough, PlaythroughUpdate, Quest,
     QuestProgress, QuestStatus, playthroughs, progress, quests,
 };
 
@@ -32,7 +32,7 @@ pub struct TrackerStatus {
 /// How the user resolved a detected in-game run.
 #[derive(Debug, Clone, PartialEq)]
 pub enum RunChoice {
-    Create { name: String, difficulty: Difficulty, is_new_game_plus: bool },
+    Create { name: String, is_new_game_plus: bool },
     Link(i64),
     Ignore,
 }
@@ -378,9 +378,8 @@ impl AppState {
                 None
             }
             RunChoice::Link(id) => Some(id),
-            RunChoice::Create { name, difficulty, is_new_game_plus } => self.create_playthrough(NewPlaythrough {
+            RunChoice::Create { name, is_new_game_plus } => self.create_playthrough(NewPlaythrough {
                 name,
-                difficulty,
                 is_new_game_plus,
                 notes: None,
                 link: None,

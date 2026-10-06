@@ -637,7 +637,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::*;
-    use quest_db::{Difficulty, NewPlaythrough, QuestStatus, open_in_memory, playthroughs, progress};
+    use quest_db::{NewPlaythrough, QuestStatus, open_in_memory, playthroughs, progress};
     use quest_scraper::mock_scrape_result;
 
     fn path(n: u32) -> String {
@@ -691,7 +691,6 @@ mod tests {
             conn,
             &NewPlaythrough {
                 name: "Run".into(),
-                difficulty: Difficulty::DeathMarch,
                 is_new_game_plus: false,
                 notes: None,
                 link: None,

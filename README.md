@@ -11,7 +11,7 @@ A Windows desktop app for tracking quest progress in *The Witcher 3: Wild Hunt* 
 - **Save auto-tracking** – watches the save folder and updates quest statuses from your latest save
   - Detects separate in-game runs and links each one to a playthrough
   - Handles loading older saves (quests revert) and ignores stale files touched by cloud sync
-- **Multiple playthroughs**, each with its own name, difficulty and progress
+- **Multiple playthroughs**, each with its own name and progress
 - **Missable quest warnings** and a **cutoff panel** listing open quests an upcoming story point will lock out
 - **Filters** by expansion, quest type, status and region (multi-select, persisted)
 - **Sorting** by story order, level, name or region, plus text search

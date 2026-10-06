@@ -1,7 +1,6 @@
 use dioxus::prelude::*;
-use quest_db::Difficulty;
 
-use super::{DIFFICULTIES, difficulty_label, format_local};
+use super::format_local;
 use crate::state::{AppState, RunChoice};
 
 /// Asks what to do with the first in-game run found in the save folder that no playthrough
@@ -26,7 +25,6 @@ fn RunPrompt(lineage_root: i64, remaining: usize) -> Element {
     let started = format_local(run.started_at);
     let default_name = format!("Playthrough started {}", run.started_at.map(|t| t.format("%Y-%m-%d").to_string()).unwrap_or_default());
     let mut name = use_signal(|| default_name);
-    let mut difficulty = use_signal(|| Difficulty::BloodAndBrokenBones);
     let mut ng_plus = use_signal(|| false);
     let unlinked: Vec<(i64, String)> = state
         .playthroughs
@@ -59,20 +57,6 @@ fn RunPrompt(lineage_root: i64, remaining: usize) -> Element {
                         span { "Name" }
                         input { class: "input", value: "{name}", oninput: move |e| name.set(e.value()) }
                     }
-                    label { class: "field",
-                        span { "Difficulty" }
-                        select {
-                            class: "select",
-                            onchange: move |e| {
-                                if let Ok(i) = e.value().parse::<usize>() {
-                                    difficulty.set(DIFFICULTIES[i]);
-                                }
-                            },
-                            for (i, d) in DIFFICULTIES.iter().enumerate() {
-                                option { value: "{i}", selected: *d == difficulty(), "{difficulty_label(*d)}" }
-                            }
-                        }
-                    }
                     label { class: "field field-inline",
                         input { r#type: "checkbox", checked: ng_plus(), onchange: move |e| ng_plus.set(e.checked()) }
                         span { "New Game+" }
@@ -83,7 +67,6 @@ fn RunPrompt(lineage_root: i64, remaining: usize) -> Element {
                         onclick: move |_| {
                             state.resolve_run(lineage_root, RunChoice::Create {
                                 name: name.read().trim().to_string(),
-                                difficulty: difficulty(),
                                 is_new_game_plus: ng_plus(),
                             });
                         },

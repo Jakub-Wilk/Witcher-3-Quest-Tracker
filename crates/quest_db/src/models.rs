@@ -1,16 +1,6 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// Playthrough difficulty level.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Difficulty {
-    JustTheStory,
-    StoryAndSword,
-    BloodAndBrokenBones,
-    DeathMarch,
-    Custom,
-}
-
 /// Expansion or base game source of a quest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum QuestSource {
@@ -77,14 +67,6 @@ macro_rules! impl_sql_enum {
     };
 }
 
-impl_sql_enum!(Difficulty {
-    JustTheStory => "JustTheStory",
-    StoryAndSword => "StoryAndSword",
-    BloodAndBrokenBones => "BloodAndBrokenBones",
-    DeathMarch => "DeathMarch",
-    Custom => "Custom",
-});
-
 impl_sql_enum!(QuestSource {
     BaseGame => "BaseGame",
     HeartsOfStone => "HeartsOfStone",
@@ -143,7 +125,6 @@ pub struct HeadSave {
 pub struct Playthrough {
     pub id: i64,
     pub name: String,
-    pub difficulty: Difficulty,
     pub is_new_game_plus: bool,
     pub notes: Option<String>,
     pub link: Option<SaveLink>,
@@ -156,7 +137,6 @@ pub struct Playthrough {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewPlaythrough {
     pub name: String,
-    pub difficulty: Difficulty,
     pub is_new_game_plus: bool,
     pub notes: Option<String>,
     pub link: Option<SaveLink>,
@@ -166,7 +146,6 @@ pub struct NewPlaythrough {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlaythroughUpdate {
     pub name: Option<String>,
-    pub difficulty: Option<Difficulty>,
     pub is_new_game_plus: Option<bool>,
     pub notes: Option<Option<String>>,
 }
