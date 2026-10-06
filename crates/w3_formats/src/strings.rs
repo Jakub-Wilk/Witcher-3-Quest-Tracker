@@ -132,14 +132,15 @@ pub fn parse(bytes: &[u8], keep: impl Fn(u32) -> bool, out: &mut HashMap<u32, St
 
 /// The "bit6" variable-length integer, decoded exactly like the reference w3strings tool: the
 /// first byte carries 6 value bits (`0x40` = more follow), later bytes 7 bits (`0x80` = more
-/// follow), and a lone `0x80` means zero.
+/// follow), and `0x80` as the first byte means zero. A later `0x80` is an ordinary continuation
+/// byte with seven zero bits (the esmx and ru string-data sizes contain one).
 fn bit6(r: &mut Reader<'_>) -> Result<u32> {
     let mut value = 0u32;
     let mut shift = 0u32;
     let mut i = 1;
     loop {
         let b = r.u8()?;
-        if b == 0x80 {
+        if b == 0x80 && i == 1 {
             return Ok(0);
         }
         let (mask, bits) = if b > 127 {
@@ -233,5 +234,11 @@ mod tests {
         let bytes = [0x5f, 0xe9, 0x0b];
         assert_eq!(bit6(&mut Reader::at(&bytes, 0)).unwrap(), 96863);
         assert_eq!(bit6(&mut Reader::at(&[0x05], 0)).unwrap(), 5);
+        assert_eq!(bit6(&mut Reader::at(&[0x80], 0)).unwrap(), 0);
+        // 6946829, the Remastered esmx.w3strings data size: a 0x80 continuation byte mid-number.
+        let bytes = [0x4d, 0x80, 0xd0, 0x06];
+        let mut r = Reader::at(&bytes, 0);
+        assert_eq!(bit6(&mut r).unwrap(), 0x6a_000d);
+        assert_eq!(r.pos(), 4);
     }
 }
