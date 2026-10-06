@@ -166,7 +166,7 @@ pub fn read_game_catalog(game_dir: &Path) -> Result<GameCatalog> {
             if let Some(title) = lookup(raw.title_id).filter(|t| !t.is_empty()) {
                 raw.quest.titles.insert(language.clone(), title);
             }
-            if let Some(desc) = lookup(raw.description_id).filter(|d| !d.is_empty()) {
+            if let Some(desc) = lookup(raw.description_id).map(|d| br_to_newlines(&d)).filter(|d| !d.is_empty()) {
                 raw.quest.descriptions.insert(language.clone(), desc);
             }
         }
@@ -210,6 +210,33 @@ fn quest_from(path: &str, e: &Export) -> std::result::Result<GameQuest, String> 
     })
 }
 
+/// Replaces `<br>`, `<br/>` and `<br />` (any case) with newlines and trims each line.
+fn br_to_newlines(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find('<') {
+        out.push_str(&rest[..start]);
+        let tag = &rest[start + 1..];
+        let end = tag.find('>');
+        let is_br = end.is_some_and(|end| {
+            let inner = tag[..end].trim_end_matches('/').trim();
+            inner.eq_ignore_ascii_case("br")
+        });
+        match end {
+            Some(end) if is_br => {
+                out.push('\n');
+                rest = &tag[end + 1..];
+            }
+            _ => {
+                out.push('<');
+                rest = tag;
+            }
+        }
+    }
+    out.push_str(rest);
+    out.lines().map(str::trim).collect::<Vec<_>>().join("\n").trim().to_string()
+}
+
 /// Parses a `Quest Name;Level` CSV. Later files win, so DLC copies can override.
 fn parse_levels(data: &[u8], out: &mut HashMap<String, i32>) {
     let text = String::from_utf8_lossy(data);
@@ -232,6 +259,14 @@ mod tests {
         assert_eq!(levels.get("sq305 scoiatael"), Some(&6));
         assert_eq!(levels.get("q302 mafia"), Some(&12));
         assert_eq!(levels.len(), 2);
+    }
+
+    #[test]
+    fn converts_br_tags_to_newlines() {
+        assert_eq!(br_to_newlines("One.<br>Two. <BR/> Three.<br />Four."), "One.\nTwo.\nThree.\nFour.");
+        assert_eq!(br_to_newlines("Para.<br><br>Next"), "Para.\n\nNext");
+        assert_eq!(br_to_newlines("a < b <i>c</i><br"), "a < b <i>c</i><br");
+        assert_eq!(br_to_newlines("Trailing<br>"), "Trailing");
     }
 
     #[test]

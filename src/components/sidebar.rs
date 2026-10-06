@@ -3,10 +3,20 @@ use quest_db::QuestStatus;
 
 use super::{QUEST_TYPES, SOURCES, region_label, source_label, type_label};
 use crate::state::AppState;
-use crate::view_options::{REGIONS, SortKey, StatusFilter, ViewOptions};
+use crate::view_options::{REGIONS, STATUSES, SortKey, ViewOptions, toggle};
+
+fn status_filter_label(status: QuestStatus) -> &'static str {
+    match status {
+        QuestStatus::NotStarted => "Not started",
+        QuestStatus::InProgress => "In progress",
+        QuestStatus::Completed => "Completed",
+        QuestStatus::Failed => "Failed",
+    }
+}
 
 /// Left panel: expansion, category, status and region filters, sort order, and progress.
-/// All choices are persisted (see `ViewOptions`).
+/// Each filter is a multi-select where "All" clears the selection. All choices are persisted
+/// (see `ViewOptions`).
 #[component]
 pub fn Sidebar() -> Element {
     let mut state = use_context::<AppState>();
@@ -27,13 +37,15 @@ pub fn Sidebar() -> Element {
             })
             .filter(|&(_, _, total)| total > 0)
             .collect();
-        // Regions that have quests in the selected expansion (plus the selected one, so the
-        // dropdown never misrepresents an active filter)
+        // Regions that have quests in the selected expansions (plus the selected ones, so an
+        // active filter is never hidden)
         let regions: Vec<_> = REGIONS
             .into_iter()
             .filter(|&r| {
-                view.region == Some(r)
-                    || rows.iter().any(|(q, _)| q.region == r && view.source.is_none_or(|s| s == q.source))
+                view.regions.contains(&r)
+                    || rows.iter().any(|(q, _)| {
+                        q.region == r && (view.sources.is_empty() || view.sources.contains(&q.source))
+                    })
             })
             .collect();
         (counts, regions)
@@ -52,14 +64,14 @@ pub fn Sidebar() -> Element {
                 h3 { class: "section-title", "Expansion" }
                 div { class: "chips",
                     button {
-                        class: if view.source.is_none() { "chip active" } else { "chip" },
-                        onclick: move |_| state.view.write().source = None,
+                        class: if view.sources.is_empty() { "chip active" } else { "chip" },
+                        onclick: move |_| state.view.write().sources.clear(),
                         "All"
                     }
                     for s in SOURCES {
                         button {
-                            class: if view.source == Some(s) { "chip active" } else { "chip" },
-                            onclick: move |_| state.view.write().source = Some(s),
+                            class: if view.sources.contains(&s) { "chip active" } else { "chip" },
+                            onclick: move |_| toggle(&mut state.view.write().sources, s),
                             "{source_label(s)}"
                         }
                     }
@@ -69,17 +81,14 @@ pub fn Sidebar() -> Element {
                 h3 { class: "section-title", "Category" }
                 ul { class: "categories",
                     li {
-                        class: if view.quest_type.is_none() { "category active" } else { "category" },
-                        onclick: move |_| state.view.write().quest_type = None,
+                        class: if view.quest_types.is_empty() { "category active" } else { "category" },
+                        onclick: move |_| state.view.write().quest_types.clear(),
                         span { "All quests" }
                     }
                     for (t, done, total) in counts {
                         li {
-                            class: if view.quest_type == Some(t) { "category active" } else { "category" },
-                            onclick: move |_| {
-                                let mut v = state.view.write();
-                                v.quest_type = if v.quest_type == Some(t) { None } else { Some(t) };
-                            },
+                            class: if view.quest_types.contains(&t) { "category active" } else { "category" },
+                            onclick: move |_| toggle(&mut state.view.write().quest_types, t),
                             span { "{type_label(t)}" }
                             span { class: "count", "{done}/{total}" }
                         }
@@ -89,34 +98,39 @@ pub fn Sidebar() -> Element {
             section {
                 h3 { class: "section-title", "Status" }
                 div { class: "chips",
-                    for s in StatusFilter::ALL {
+                    button {
+                        class: if view.statuses.is_empty() { "chip active" } else { "chip" },
+                        onclick: move |_| state.view.write().statuses.clear(),
+                        "All"
+                    }
+                    for s in STATUSES {
                         button {
-                            class: if view.status == s { "chip active" } else { "chip" },
-                            onclick: move |_| state.view.write().status = s,
-                            "{s.label()}"
+                            class: if view.statuses.contains(&s) { "chip active" } else { "chip" },
+                            onclick: move |_| toggle(&mut state.view.write().statuses, s),
+                            "{status_filter_label(s)}"
+                        }
+                    }
+                }
+            }
+            section {
+                h3 { class: "section-title", "Region" }
+                div { class: "chips",
+                    button {
+                        class: if view.regions.is_empty() { "chip active" } else { "chip" },
+                        onclick: move |_| state.view.write().regions.clear(),
+                        "All"
+                    }
+                    for r in regions {
+                        button {
+                            class: if view.regions.contains(&r) { "chip active" } else { "chip" },
+                            onclick: move |_| toggle(&mut state.view.write().regions, r),
+                            "{region_label(r)}"
                         }
                     }
                 }
             }
             section {
                 label { class: "field",
-                    span { class: "section-title", "Region" }
-                    select {
-                        class: "select",
-                        onchange: move |e| {
-                            state.view.write().region = e.value().parse::<usize>().ok().and_then(|i| REGIONS.get(i).copied());
-                        },
-                        option { value: "", selected: view.region.is_none(), "All regions" }
-                        for r in regions {
-                            option {
-                                value: "{REGIONS.iter().position(|&x| x == r).unwrap_or_default()}",
-                                selected: view.region == Some(r),
-                                "{region_label(r)}"
-                            }
-                        }
-                    }
-                }
-                label { class: "field sort-field",
                     span { class: "section-title", "Sort by" }
                     select {
                         class: "select",

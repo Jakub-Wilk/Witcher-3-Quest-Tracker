@@ -180,6 +180,8 @@ mod tests {
         settings.ui.language = "pl".into();
         settings.ui.last_playthrough_id = Some(3);
         settings.view.sort = SortKey::Level;
+        settings.view.regions = vec![quest_db::Region::Velen, quest_db::Region::Skellige];
+        settings.view.statuses = vec![quest_db::QuestStatus::InProgress];
         settings.view.search = "not saved".into();
         settings.tracking.watch_saves = false;
         settings.save(&path).unwrap();
@@ -205,6 +207,12 @@ mod tests {
         std::fs::write(&path, "[view]\nsort = \"Name\"").unwrap();
         assert_eq!(AppSettings::load(&path).view.sort, SortKey::Name);
         assert_eq!(AppSettings::load(&path).ui.language, "en");
+
+        // Single-select filter keys from older versions are ignored, not fatal.
+        std::fs::write(&path, "[ui]\nlanguage = \"pl\"\n[view]\nstatus = \"Open\"\nregion = \"Velen\"").unwrap();
+        let loaded = AppSettings::load(&path);
+        assert_eq!(loaded.ui.language, "pl");
+        assert!(loaded.view.statuses.is_empty() && loaded.view.regions.is_empty());
     }
 
     #[test]

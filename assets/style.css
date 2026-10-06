@@ -342,7 +342,7 @@ button { font: inherit; }
     animation: fade-in 0.15s ease;
 }
 
-.quest-desc { margin: 0 0 8px; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+.quest-desc { margin: 0 0 8px; color: var(--text-muted); font-size: 13px; line-height: 1.5; white-space: pre-line; }
 .notes { width: 100%; resize: vertical; }
 
 .list-footer {
@@ -469,7 +469,6 @@ button { font: inherit; }
 
 .modal-delete { margin-right: auto; }
 
-.sort-field { margin-top: 14px; }
 .sidebar .field .section-title { margin-bottom: 4px; }
 .reset-filters { margin-top: 14px; width: 100%; }
 
