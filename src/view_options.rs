@@ -1,5 +1,7 @@
 //! Quest list filtering and sorting options, persisted in [`crate::settings::AppSettings`].
 
+use std::collections::HashMap;
+
 use quest_db::{Quest, QuestProgress, QuestSource, QuestStatus, QuestType, Region};
 use serde::{Deserialize, Serialize};
 
@@ -31,10 +33,12 @@ pub enum SortKey {
     Level,
     Name,
     Region,
+    /// By the story order of the quest's cutoff point, earliest first; no cutoff last.
+    Cutoff,
 }
 
 impl SortKey {
-    pub const ALL: [SortKey; 4] = [SortKey::Story, SortKey::Level, SortKey::Name, SortKey::Region];
+    pub const ALL: [SortKey; 5] = [SortKey::Story, SortKey::Level, SortKey::Name, SortKey::Region, SortKey::Cutoff];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -42,6 +46,7 @@ impl SortKey {
             SortKey::Level => "Level",
             SortKey::Name => "Name",
             SortKey::Region => "Region",
+            SortKey::Cutoff => "Cutoff",
         }
     }
 }
@@ -88,6 +93,15 @@ impl ViewOptions {
             }
             SortKey::Name => visible.sort_by_cached_key(|(q, _)| q.title.to_lowercase()),
             SortKey::Region => visible.sort_by_key(|(q, _)| (region_rank(q.region), story(q))),
+            SortKey::Cutoff => {
+                // Look cutoffs up in all rows: the cutoff quest itself may be filtered out.
+                let cutoff_order: HashMap<i64, i32> = rows.iter().map(|(q, _)| (q.id, story(q))).collect();
+                let cutoff = |q: &Quest| match q.cutoff_quest_id {
+                    Some(id) => (false, cutoff_order.get(&id).copied().unwrap_or(i32::MAX)),
+                    None => (true, i32::MAX),
+                };
+                visible.sort_by_key(|(q, _)| (cutoff(q), story(q)))
+            }
         }
         visible
     }
@@ -166,6 +180,13 @@ mod tests {
         assert_eq!(ids(&options, &rows), vec![2, 1, 3, 4]);
         options.sort = SortKey::Region;
         assert_eq!(ids(&options, &rows), vec![2, 3, 1, 4]);
+
+        options.sort = SortKey::Cutoff;
+        let mut cut = rows.clone();
+        cut[0].0.cutoff_quest_id = Some(4);
+        cut[2].0.cutoff_quest_id = Some(2);
+        assert_eq!(ids(&options, &cut), vec![3, 1, 2, 4]);
+        options.sort = SortKey::Region;
 
         options.statuses = vec![QuestStatus::NotStarted, QuestStatus::InProgress];
         assert_eq!(ids(&options, &rows), vec![2, 4]);
