@@ -33,7 +33,8 @@ pub enum SortKey {
     Level,
     Name,
     Region,
-    /// By the story order of the quest's cutoff point, earliest first; no cutoff last.
+    /// Quests with a cutoff first, by the story order of their cutoff point; then quests with
+    /// important notes, by level; then the rest, by level.
     Cutoff,
 }
 
@@ -86,21 +87,25 @@ impl ViewOptions {
     pub fn apply<'a>(&self, rows: &'a [(Quest, QuestProgress)]) -> Vec<&'a (Quest, QuestProgress)> {
         let mut visible: Vec<_> = rows.iter().filter(|(q, p)| self.matches(q, p.status())).collect();
         let story = |q: &Quest| q.sort_order.unwrap_or(i32::MAX);
+        let level = |q: &Quest| q.recommended_level.unwrap_or(i32::MAX);
         match self.sort {
             SortKey::Story => visible.sort_by_key(|(q, _)| story(q)),
-            SortKey::Level => {
-                visible.sort_by_key(|(q, _)| (q.recommended_level.unwrap_or(i32::MAX), story(q)))
-            }
+            SortKey::Level => visible.sort_by_key(|(q, _)| (level(q), story(q))),
             SortKey::Name => visible.sort_by_cached_key(|(q, _)| q.title.to_lowercase()),
             SortKey::Region => visible.sort_by_key(|(q, _)| (region_rank(q.region), story(q))),
             SortKey::Cutoff => {
                 // Look cutoffs up in all rows: the cutoff quest itself may be filtered out.
                 let cutoff_order: HashMap<i64, i32> = rows.iter().map(|(q, _)| (q.id, story(q))).collect();
-                let cutoff = |q: &Quest| match q.cutoff_quest_id {
-                    Some(id) => (false, cutoff_order.get(&id).copied().unwrap_or(i32::MAX)),
-                    None => (true, i32::MAX),
+                // Groups: quests with a cutoff (by cutoff story order), then quests with important
+                // notes, then the rest; the latter two by level.
+                let key = |q: &Quest| match q.cutoff_quest_id {
+                    Some(id) => (0, cutoff_order.get(&id).copied().unwrap_or(i32::MAX), story(q)),
+                    None => {
+                        let group = if q.important_notes.is_some() { 1 } else { 2 };
+                        (group, level(q), story(q))
+                    }
                 };
-                visible.sort_by_key(|(q, _)| (cutoff(q), story(q)))
+                visible.sort_by_key(|(q, _)| key(q))
             }
         }
         visible
@@ -185,6 +190,8 @@ mod tests {
         let mut cut = rows.clone();
         cut[0].0.cutoff_quest_id = Some(4);
         cut[2].0.cutoff_quest_id = Some(2);
+        assert_eq!(ids(&options, &cut), vec![3, 1, 4, 2]);
+        cut[1].0.important_notes = Some("Missable".into());
         assert_eq!(ids(&options, &cut), vec![3, 1, 2, 4]);
         options.sort = SortKey::Region;
 
