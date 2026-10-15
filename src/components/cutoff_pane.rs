@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use dioxus::prelude::*;
-use quest_db::{Quest, QuestProgress};
+use quest_db::{Quest, QuestProgress, QuestStatus};
 
 use super::is_open;
 use crate::state::AppState;
@@ -14,8 +14,8 @@ pub fn CutoffPane() -> Element {
     let rows = state.rows.read();
     let by_id: HashMap<i64, &(Quest, QuestProgress)> = rows.iter().map(|r| (r.0.id, r)).collect();
 
-    // (cutoff sort order, cutoff name, cutoff id) -> open quests it will lock out
-    let mut impending: BTreeMap<(i32, &str, i64), Vec<&str>> = BTreeMap::new();
+    // (cutoff sort order, cutoff name, cutoff id, cutoff in progress) -> open quests it will lock out
+    let mut impending: BTreeMap<(i32, &str, i64, bool), Vec<&str>> = BTreeMap::new();
     let mut missed: Vec<(&str, &str)> = Vec::new();
 
     for (quest, _) in rows.iter().filter(|(_, p)| is_open(p.status())) {
@@ -24,7 +24,8 @@ pub fn CutoffPane() -> Element {
             continue;
         };
         if is_open(cutoff_progress.status()) {
-            let key = (cutoff.sort_order.unwrap_or(i32::MAX), cutoff.title.as_str(), cutoff.id);
+            let active = cutoff_progress.status() == QuestStatus::InProgress;
+            let key = (cutoff.sort_order.unwrap_or(i32::MAX), cutoff.title.as_str(), cutoff.id, active);
             impending.entry(key).or_default().push(quest.title.as_str());
         } else {
             missed.push((quest.title.as_str(), cutoff.title.as_str()));
@@ -37,8 +38,11 @@ pub fn CutoffPane() -> Element {
             if impending.is_empty() {
                 p { class: "muted", "No open quests are at risk of being locked out." }
             }
-            for ((_, cutoff_name, cutoff_id), at_risk) in impending.iter() {
-                div { key: "{cutoff_id}", class: "warning-pane",
+            for ((_, cutoff_name, cutoff_id, active), at_risk) in impending.iter() {
+                div {
+                    key: "{cutoff_id}",
+                    class: if *active { "warning-pane cutoff-active" } else { "warning-pane" },
+                    title: if *active { "In progress: finish the quests below before completing it" },
                     div { class: "cutoff-name", "📌 {cutoff_name}" }
                     div { class: "muted small", "Completing it will lock out:" }
                     ul { class: "risk-list",

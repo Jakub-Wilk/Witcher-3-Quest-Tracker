@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use dioxus::prelude::*;
+use quest_db::QuestStatus;
 use quest_scraper::ScrapeProgress;
 
 use super::{PlaythroughModal, QuestCard};
@@ -19,10 +20,11 @@ pub fn QuestList() -> Element {
     let linked = state.playthroughs.read().iter().any(|p| Some(p.id) == current && p.link.is_some());
     let rows = state.rows.read();
 
-    let names: HashMap<i64, &str> = rows.iter().map(|(q, _)| (q.id, q.title.as_str())).collect();
+    let cutoffs: HashMap<i64, (&str, QuestStatus)> =
+        rows.iter().map(|(q, p)| (q.id, (q.title.as_str(), p.status()))).collect();
     let visible = view.apply(&rows);
     let visible_done =
-        visible.iter().filter(|(_, p)| p.status() == quest_db::QuestStatus::Completed).count();
+        visible.iter().filter(|(_, p)| p.status() == QuestStatus::Completed).count();
     let visible_pct = if visible.is_empty() {
         0.0
     } else {
@@ -84,12 +86,18 @@ pub fn QuestList() -> Element {
                     div { class: "empty", p { "No quests match the current filters." } }
                 } else {
                     for (quest, progress) in visible.iter() {
-                        QuestCard {
-                            key: "{current:?}-{quest.id}",
-                            quest: quest.clone(),
-                            progress: progress.clone(),
-                            cutoff_name: quest.cutoff_quest_id.and_then(|id| names.get(&id)).map(|n| n.to_string()),
-                            save_synced: linked && quest.is_trackable(),
+                        {
+                            let cutoff = quest.cutoff_quest_id.and_then(|id| cutoffs.get(&id));
+                            rsx! {
+                                QuestCard {
+                                    key: "{current:?}-{quest.id}",
+                                    quest: quest.clone(),
+                                    progress: progress.clone(),
+                                    cutoff_name: cutoff.map(|(name, _)| name.to_string()),
+                                    cutoff_active: cutoff.is_some_and(|&(_, s)| s == QuestStatus::InProgress),
+                                    save_synced: linked && quest.is_trackable(),
+                                }
+                            }
                         }
                     }
                 }

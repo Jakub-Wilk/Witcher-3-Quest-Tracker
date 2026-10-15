@@ -306,6 +306,7 @@ button { font: inherit; }
 .quest-card.completed .quest-name { text-decoration: line-through; text-decoration-color: var(--gold-dim); }
 .quest-card.failed { border-color: rgba(231, 76, 60, 0.4); background: rgba(231, 76, 60, 0.06); }
 .quest-card.failed .quest-name { color: var(--red); }
+.quest-card.cutoff-active, .quest-card.cutoff-active:hover { border-color: var(--red); box-shadow: 0 0 0 1px var(--red); }
 
 .quest-row { display: flex; gap: 12px; align-items: flex-start; }
 .quest-main { flex: 1; min-width: 0; }
@@ -373,6 +374,12 @@ button { font: inherit; }
     border-radius: 0 8px 8px 0;
     padding: 12px;
     margin-bottom: 10px;
+}
+
+.warning-pane.cutoff-active { animation: cutoff-blink 1.2s ease-in-out infinite; }
+@keyframes cutoff-blink {
+    0%, 100% { background: rgba(231, 76, 60, 0.05); }
+    50% { background: rgba(231, 76, 60, 0.3); }
 }
 
 .cutoff-name { font-weight: 600; margin-bottom: 4px; }

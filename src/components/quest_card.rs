@@ -32,6 +32,8 @@ pub fn QuestCard(
     quest: Quest,
     progress: QuestProgress,
     cutoff_name: Option<String>,
+    /// The cutoff quest is in progress: this quest is about to be locked out.
+    cutoff_active: bool,
     save_synced: bool,
 ) -> Element {
     let mut state = use_context::<AppState>();
@@ -50,6 +52,7 @@ pub fn QuestCard(
     let card_class = match status {
         QuestStatus::Completed => "card quest-card completed",
         QuestStatus::Failed => "card quest-card failed",
+        _ if cutoff_active => "card quest-card cutoff-active",
         _ => "card quest-card",
     };
 
