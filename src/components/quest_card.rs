@@ -98,7 +98,7 @@ pub fn QuestCard(
                             div { class: "quest-warning", "⚠ Cutoff: {cutoff}" }
                         }
                         if let Some(notes) = &quest.important_notes {
-                            div { class: "quest-important", title: "{notes}", "❗ {notes}" }
+                            div { class: "quest-important", "❗ {notes}" }
                         }
                     }
                     if progress.overrides_save() {
