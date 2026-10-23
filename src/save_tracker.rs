@@ -40,16 +40,7 @@ impl ParsedSave {
 
     /// Save kind from the file name: `ManualSave`, `AutoSave`, `QuickSave` or `CheckPoint`.
     pub fn kind(&self) -> SaveKind {
-        let name = self.file_name();
-        if name.starts_with("QuickSave") {
-            SaveKind::Quick
-        } else if name.starts_with("AutoSave") {
-            SaveKind::Auto
-        } else if name.starts_with("CheckPoint") {
-            SaveKind::Checkpoint
-        } else {
-            SaveKind::Manual
-        }
+        SaveKind::of_file(&self.file_name())
     }
 
     fn link(&self) -> Option<SaveLink> {
@@ -68,6 +59,21 @@ pub enum SaveKind {
     Quick,
     Auto,
     Checkpoint,
+}
+
+impl SaveKind {
+    /// The kind a save file's name tells.
+    pub fn of_file(name: &str) -> Self {
+        if name.starts_with("QuickSave") {
+            SaveKind::Quick
+        } else if name.starts_with("AutoSave") {
+            SaveKind::Auto
+        } else if name.starts_with("CheckPoint") {
+            SaveKind::Checkpoint
+        } else {
+            SaveKind::Manual
+        }
+    }
 }
 
 pub fn kind_label(tr: Tr, kind: SaveKind) -> &'static str {

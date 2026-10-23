@@ -2,7 +2,9 @@ use companion_db::Playthrough;
 use dioxus::prelude::*;
 
 use super::{PlaythroughModal, SettingsModal};
+use crate::components::format_local;
 use crate::components::ornament::{Divider, Glyph, Icon, Medallion};
+use crate::save_tracker::{SaveKind, kind_label};
 use crate::i18n::LANGUAGES;
 use crate::settings::Tab;
 use crate::state::{AppState, SyncStatus};
@@ -128,43 +130,62 @@ pub fn Header() -> Element {
     }
 }
 
-/// Save tracking status: a pulsing dot while the save folder is watched, the last save read,
-/// and a button to read the whole folder again.
+/// Save tracking at a glance: when the current playthrough's latest save was made, a dot that
+/// pulses while the save folder is watched, and a button to read the folder again. The file and
+/// watching status are in the tooltip.
 #[component]
 fn SaveChip() -> Element {
     let mut state = use_context::<AppState>();
     let tr = *state.tr.read();
-    let tracker = state.tracker.read().clone();
+    let scanning = state.tracker.read().scanning;
     let settings = state.settings.read();
     let watching = settings.tracking.watch_saves && settings.valid_save_dir().is_some();
     drop(settings);
-    let linked = state
-        .playthroughs
-        .read()
-        .iter()
-        .any(|p| Some(p.id) == *state.current.read() && p.link.is_some());
+    let current = *state.current.read();
+    let head = state.playthroughs.read().iter().find(|p| Some(p.id) == current).and_then(|p| p.head.clone());
+
+    let watch_hint = if watching { t!(tr, "save.watching_hint") } else { t!(tr, "save.not_watching_hint") };
+    let (time, caption, title) = match &head {
+        Some(head) => {
+            let kind = kind_label(tr, SaveKind::of_file(&head.file));
+            let day = head.saved_at.map(|t| {
+                if t.date() == chrono::Local::now().date_naive() {
+                    t!(tr, "save.today").to_string()
+                } else {
+                    t.format("%Y-%m-%d").to_string()
+                }
+            });
+            let caption = match day {
+                Some(day) => format!("{kind} · {day}"),
+                None => kind.to_string(),
+            };
+            let when = format_local(tr, head.saved_at);
+            let title = format!("{}\n{watch_hint}", t!(tr, "save.latest_hint", file = head.file, time = when));
+            (head.saved_at.map_or("--:--".into(), |t| t.format("%H:%M").to_string()), caption, title)
+        }
+        None => ("--:--".to_string(), t!(tr, "save.none").to_string(), watch_hint.to_string()),
+    };
+    let class = match (scanning, watching) {
+        (true, _) => "save-chip is-scanning",
+        (false, true) => "save-chip is-watching",
+        (false, false) => "save-chip",
+    };
 
     rsx! {
-        div {
-            class: if watching { "save-chip is-watching" } else { "save-chip" },
-            title: if watching { t!(tr, "save.watching_hint") } else { t!(tr, "save.not_watching_hint") },
-            if tracker.scanning {
-                span { class: "save-spinner" }
-                span { {t!(tr, "save.reading")} }
+        div { class, title: "{title}",
+            if scanning {
+                span { class: "save-spinner", title: t!(tr, "save.reading") }
             } else {
                 span { class: "save-dot" }
-                if let Some(last) = &tracker.last {
-                    span { class: "save-last", "{last}" }
-                } else if watching {
-                    span { if linked { {t!(tr, "save.watching_linked")} } else { {t!(tr, "save.watching")} } }
-                } else {
-                    span { {t!(tr, "save.not_watching")} }
-                }
+            }
+            span { class: "save-when",
+                span { class: "save-time num", key: "{time}", "{time}" }
+                span { class: "save-caption", "{caption}" }
             }
             button {
                 class: "save-rescan",
                 title: t!(tr, "save.rescan"),
-                disabled: tracker.scanning,
+                disabled: scanning,
                 onclick: move |_| state.rescan_saves(false),
                 Glyph { icon: Icon::Sync }
             }

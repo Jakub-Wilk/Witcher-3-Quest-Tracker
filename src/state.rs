@@ -24,12 +24,10 @@ pub enum SyncStatus {
     Failed(String),
 }
 
-/// What the save tracker last did, for the header.
+/// What the save tracker is doing, for the header.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TrackerStatus {
     pub scanning: bool,
-    /// e.g. "Quicksave 22:39 → Death March run", in the interface language.
-    pub last: Option<String>,
 }
 
 /// How the user resolved a detected in-game run.
@@ -388,9 +386,6 @@ impl AppState {
         self.reload_playthroughs();
         let name = self.playthrough_name(playthrough_id);
         let tr = *self.tr.peek();
-        let time = save.saved_at().map(|t| t.format("%H:%M").to_string()).unwrap_or_default();
-        let kind = save_tracker::kind_label(tr, save.kind());
-        self.tracker.write().last = Some(t!(tr, "save.last", kind = kind, time = time, name = name));
         if rollback && reverted > 0 {
             self.notice.set(Some(t!(tr, "save.rollback", name = name, n = reverted, file = save.file_name())));
         }

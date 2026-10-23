@@ -161,28 +161,44 @@
 .lang-select .select { max-width: 118px; font-size: 0.9rem; }
 
 .save-chip {
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  flex: 0 3 auto;
-  min-width: 90px;
-  max-width: 190px;
-  padding: 3px 4px 3px 11px;
+  height: 36px;
+  padding: 0 4px 0 11px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 18px;
   background: rgba(0, 0, 0, 0.35);
-  font-size: 0.84rem;
-  font-style: italic;
-  color: var(--parchment-dim);
-  white-space: nowrap;
+  cursor: default;
+  transition: border-color 0.3s, box-shadow 0.3s;
 }
 
-.save-chip > span:not(.save-dot):not(.save-spinner) {
+.save-chip.is-watching { border-color: rgba(142, 208, 99, 0.35); }
+.save-chip:hover { box-shadow: 0 0 12px rgba(201, 164, 92, 0.2); }
+
+.save-when {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+}
+
+.save-time {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--gold-bright);
+  animation: qty-pop 0.45s var(--ease-spring);
+}
+
+.save-caption {
+  max-width: 130px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  font-style: italic;
+  color: var(--muted);
 }
-
-.save-chip.is-watching { border-color: rgba(142, 208, 99, 0.4); }
 
 .save-dot {
   flex: none;
