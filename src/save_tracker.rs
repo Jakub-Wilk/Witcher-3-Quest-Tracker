@@ -8,14 +8,15 @@
 //! - a save not newer than the head (an old file touched by cloud sync, say) is ignored.
 //!
 //! The newest save always wins because it is the game's real current state; the user's manual
-//! statuses are stored separately and are never touched.
+//! statuses are stored separately and are never touched. Applying a save also replaces the
+//! playthrough's inventory (for the recipe planner) when the save's inventory could be read.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use chrono::NaiveDateTime;
-use companion_db::{Connection, HeadSave, QuestStatus, SaveLink, playthroughs, progress, quests};
+use companion_db::{Connection, HeadSave, QuestStatus, SaveLink, items, planner, playthroughs, progress, quests};
 use w3_formats::{JournalStatus, SaveSnapshot, SaveTime};
 
 /// A parsed save file.
@@ -194,7 +195,8 @@ pub fn link(conn: &mut Connection, playthrough_id: i64, run: &DetectedRun) -> co
     apply(conn, playthrough_id, &run.newest, false)
 }
 
-/// Writes a save's quest statuses and makes it the playthrough's head, in one transaction.
+/// Writes a save's quest statuses and inventory and makes it the playthrough's head, in one
+/// transaction.
 fn apply(conn: &mut Connection, playthrough_id: i64, save: &ParsedSave, rollback: bool) -> companion_db::Result<Outcome> {
     let tx = conn.transaction()?;
     let ids = quests::journal_ids(&tx)?;
@@ -213,6 +215,16 @@ fn apply(conn: &mut Connection, playthrough_id: i64, save: &ParsedSave, rollback
         saved_at: save.saved_at(),
     };
     playthroughs::set_head(&tx, playthrough_id, &head)?;
+    if let Some(inventory) = &save.snapshot.inventory {
+        let ids = items::ids_by_internal_name(&tx)?;
+        let mut carried: HashMap<String, u32> = HashMap::new();
+        for (name, qty) in inventory {
+            if let Some(id) = ids.get(name) {
+                *carried.entry(id.clone()).or_default() += qty;
+            }
+        }
+        planner::replace_inventory(&tx, playthrough_id, head.key, &carried)?;
+    }
     tx.commit()?;
     Ok(Outcome::Applied {
         playthrough_id,
@@ -400,6 +412,41 @@ mod tests {
         );
         assert_eq!(status(&conn, pt, a), QuestStatus::InProgress);
         assert_eq!(status(&conn, pt, b), QuestStatus::NotStarted);
+    }
+
+    #[test]
+    fn applying_a_save_replaces_the_inventory() {
+        let (mut conn, pt, _, _) = setup();
+        for (id, internal) in [("swallow-2", "Swallow 2"), ("celandine", "Celandine")] {
+            let item = companion_db::NewItem {
+                id: id.into(),
+                internal_name: internal.into(),
+                name_key: id.into(),
+                category: "potion".into(),
+                quality: 1,
+                expansion: None,
+                in_base: true,
+                in_plus: true,
+            };
+            items::upsert(&conn, &item).unwrap();
+        }
+        let mut first = save(&[200], &[]);
+        first.snapshot.inventory =
+            Some(HashMap::from([("Swallow 2".into(), 2), ("Celandine".into(), 9), ("Unknown junk".into(), 1)]));
+        link(&mut conn, pt, &run(first)).unwrap();
+        let carried = planner::inventory(&conn, pt).unwrap();
+        assert_eq!(carried, HashMap::from([("swallow-2".to_string(), 2), ("celandine".to_string(), 9)]));
+        assert_eq!(playthroughs::get(&conn, pt).unwrap().inventory_save_key, Some(200));
+
+        // A save whose inventory could not be read keeps the previous one.
+        process(&mut conn, &save(&[200, 300], &[])).unwrap();
+        assert_eq!(planner::inventory(&conn, pt).unwrap().len(), 2);
+        assert_eq!(playthroughs::get(&conn, pt).unwrap().inventory_save_key, Some(200));
+
+        let mut later = save(&[200, 300, 400], &[]);
+        later.snapshot.inventory = Some(HashMap::from([("Celandine".into(), 1)]));
+        process(&mut conn, &later).unwrap();
+        assert_eq!(planner::inventory(&conn, pt).unwrap(), HashMap::from([("celandine".to_string(), 1)]));
     }
 
     #[test]
