@@ -1,5 +1,5 @@
 [package]
-name = "quest_scraper"
+name = "witcher_wiki"
 version = "0.1.0"
 edition = "2024"
 
@@ -9,7 +9,7 @@ serde_json = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["time"] }
 regex = "1"
-quest_db = { path = "../quest_db" }
+companion_db = { path = "../companion_db" }
 
 [features]
 # Exposes `mock_scrape_result()` sample data for downstream tests.

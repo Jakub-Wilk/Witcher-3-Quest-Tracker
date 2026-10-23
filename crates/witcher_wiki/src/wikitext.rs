@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-use quest_db::{QuestSource, QuestType, Region};
+use companion_db::{QuestSource, QuestType, Region};
 use regex::Regex;
 
 use crate::error::{Result, ScraperError};

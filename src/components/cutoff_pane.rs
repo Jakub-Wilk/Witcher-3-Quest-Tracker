@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use dioxus::prelude::*;
-use quest_db::{Quest, QuestProgress, QuestStatus};
+use companion_db::{Quest, QuestProgress, QuestStatus};
 
 use super::is_open;
 use crate::state::AppState;

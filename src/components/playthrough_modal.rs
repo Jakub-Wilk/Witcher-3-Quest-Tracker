@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use quest_db::{NewPlaythrough, Playthrough, PlaythroughUpdate};
+use companion_db::{NewPlaythrough, Playthrough, PlaythroughUpdate};
 
 use super::format_local;
 use crate::state::AppState;

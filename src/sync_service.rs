@@ -11,8 +11,8 @@ use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::path::PathBuf;
 
-use quest_db::{Connection, NewQuest, QuestSource, QuestText, QuestType, Region, quests};
-use quest_scraper::{Language, ScrapeProgress, ScrapeResult, ScrapedQuest, WikiScraperClient};
+use companion_db::{Connection, NewQuest, QuestSource, QuestText, QuestType, Region, quests};
+use witcher_wiki::{Language, ScrapeProgress, ScrapeResult, ScrapedQuest, WikiScraperClient};
 use w3_formats::{Content, GameCatalog, GameQuest, JournalQuestType};
 
 /// What a running sync is doing, for the UI.
@@ -129,7 +129,7 @@ pub async fn fetch(game_dir: PathBuf, mut on_phase: impl FnMut(SyncPhase)) -> Re
 /// 5. delete quests that left the game data, unless a user has notes or a status on them.
 ///
 /// Without wiki data, the wiki-derived fields of existing quests are kept as they were.
-pub fn merge(conn: &mut Connection, fetched: &Fetched) -> quest_db::Result<SyncReport> {
+pub fn merge(conn: &mut Connection, fetched: &Fetched) -> companion_db::Result<SyncReport> {
     let tx = conn.transaction()?;
     let mut report = SyncReport { languages: fetched.catalog.languages.len(), ..Default::default() };
     let catalog = &without_excluded(&fetched.catalog, EXCLUDED_JOURNALS, &mut report);
@@ -138,7 +138,7 @@ pub fn merge(conn: &mut Connection, fetched: &Fetched) -> quest_db::Result<SyncR
     let wiki = fetched.wiki.as_ref().ok();
     report.wiki_error = fetched.wiki.as_ref().err().cloned();
     let matches = wiki.map(|w| match_wiki(catalog, w, WIKI_PAGE_OVERRIDES, &mut report)).unwrap_or_default();
-    let previous: HashMap<String, quest_db::Quest> = if wiki.is_none() {
+    let previous: HashMap<String, companion_db::Quest> = if wiki.is_none() {
         quests::list(&tx, "en")?.into_iter().map(|q| (q.journal_path.clone(), q)).collect()
     } else {
         quests::clear_wiki_page_ids(&tx)?;
@@ -273,7 +273,7 @@ pub fn merge(conn: &mut Connection, fetched: &Fetched) -> quest_db::Result<SyncR
     Ok(report)
 }
 
-fn upsert(tx: &Connection, quest: &NewQuest, report: &mut SyncReport) -> quest_db::Result<i64> {
+fn upsert(tx: &Connection, quest: &NewQuest, report: &mut SyncReport) -> companion_db::Result<i64> {
     let (id, inserted) = quests::upsert(tx, quest)?;
     if inserted {
         report.inserted += 1;
@@ -312,7 +312,7 @@ fn without_excluded(catalog: &GameCatalog, excluded: &[&str], report: &mut SyncR
 /// Of several journal files sharing a wiki page, the one the quest row is keyed by: a file whose
 /// title is the page's (preferring the same expansion), else the first.
 fn main_member(catalog: &GameCatalog, members: &[usize], page: &ScrapedQuest) -> usize {
-    let keys = [normalize(&page.name), normalize(quest_scraper::wikitext::strip_disambiguator(&page.wiki_title))];
+    let keys = [normalize(&page.name), normalize(witcher_wiki::wikitext::strip_disambiguator(&page.wiki_title))];
     let titled = |i: &&usize| keys.contains(&normalize(catalog.quests[**i].title("en").unwrap_or_default()));
     members
         .iter()
@@ -348,7 +348,7 @@ fn match_wiki(
     }
     let mut matches: HashMap<usize, usize> = HashMap::new();
     for (w, scraped) in wiki.quests.iter().enumerate() {
-        let candidates = [normalize(&scraped.name), normalize(quest_scraper::wikitext::strip_disambiguator(&scraped.wiki_title))]
+        let candidates = [normalize(&scraped.name), normalize(witcher_wiki::wikitext::strip_disambiguator(&scraped.wiki_title))]
             .into_iter()
             .find_map(|key| by_title.get(&key))
             .map(Vec::as_slice)
@@ -451,7 +451,7 @@ fn level_of(game: Option<i32>, wiki: Option<i32>) -> Option<i32> {
 /// A wiki quest the game journal does not have (mostly unmarked events).
 fn wiki_only_quest(w: &ScrapedQuest) -> NewQuest {
     NewQuest {
-        journal_path: format!("{}{}", quest_db::WIKI_ONLY_PREFIX, w.page_id),
+        journal_path: format!("{}{}", companion_db::WIKI_ONLY_PREFIX, w.page_id),
         journal_guid: String::new(),
         base_name: w.wiki_title.clone(),
         source: w.source,
@@ -637,8 +637,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::*;
-    use quest_db::{NewPlaythrough, QuestStatus, open_in_memory, playthroughs, progress};
-    use quest_scraper::mock_scrape_result;
+    use companion_db::{NewPlaythrough, QuestStatus, open_in_memory, playthroughs, progress};
+    use witcher_wiki::mock_scrape_result;
 
     fn path(n: u32) -> String {
         format!("gameplay\\journal\\quests\\q{n}.journal")

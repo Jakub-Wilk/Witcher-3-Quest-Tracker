@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use quest_db::{QuestSource, QuestType, Region};
+use companion_db::{QuestSource, QuestType, Region};
 
 use crate::language::Language;
 

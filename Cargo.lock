@@ -406,6 +406,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "companion_db"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "rusqlite",
+ "rusqlite_migration",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "const-serialize"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3755,30 +3767,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "quest_db"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "rusqlite",
- "rusqlite_migration",
- "serde",
- "tempfile",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "quest_scraper"
-version = "0.1.0"
-dependencies = [
- "quest_db",
- "regex",
- "reqwest",
- "serde_json",
- "thiserror 2.0.21",
- "tokio",
-]
-
-[[package]]
 name = "quick-error"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6209,16 +6197,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
-name = "witcher_3_quest_tracker"
-version = "0.3.3"
+name = "witcher_3_companion"
+version = "0.4.0"
 dependencies = [
  "chrono",
+ "companion_db",
  "dioxus",
  "dirs 7.0.0",
  "notify",
  "open",
- "quest_db",
- "quest_scraper",
  "rfd",
  "serde",
  "tempfile",
@@ -6228,6 +6215,19 @@ dependencies = [
  "tracing-subscriber",
  "w3_formats",
  "winresource",
+ "witcher_wiki",
+]
+
+[[package]]
+name = "witcher_wiki"
+version = "0.1.0"
+dependencies = [
+ "companion_db",
+ "regex",
+ "reqwest",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]

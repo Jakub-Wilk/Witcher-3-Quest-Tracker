@@ -1,4 +1,4 @@
-# Witcher 3 Quest Tracker
+# Witcher 3 Companion
 
 A Windows desktop app for tracking quest progress in *The Witcher 3: Wild Hunt* (Remastered / next-gen), built with Rust and Dioxus.
 
@@ -35,7 +35,7 @@ Prebuilt Windows binaries are on the [Releases](../../releases) page.
 cargo run --release
 ```
 
-App data (database and `settings.toml`) is stored in the OS data directory. Set `W3QT_DATA_DIR` to use a different one.
+App data (database and `settings.toml`) is stored in the OS data directory. Set `W3C_DATA_DIR` to use a different one.
 
 ## Project layout
 

@@ -1,8 +1,8 @@
 use thiserror::Error;
 
-/// The top-level error type for all quest_db operations.
+/// The top-level error type for all companion_db operations.
 #[derive(Debug, Error)]
-pub enum QuestTrackerError {
+pub enum DbError {
     /// Wraps a raw rusqlite database error.
     #[error("Database error: {0}")]
     Db(#[from] rusqlite::Error),
@@ -24,4 +24,4 @@ pub enum QuestTrackerError {
     InvalidData(String),
 }
 
-pub type Result<T> = std::result::Result<T, QuestTrackerError>;
+pub type Result<T> = std::result::Result<T, DbError>;

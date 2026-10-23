@@ -1,6 +1,6 @@
 //! Offline sample data mirroring real wiki content, for tests.
 
-use quest_db::{QuestSource, QuestType, Region};
+use companion_db::{QuestSource, QuestType, Region};
 
 use crate::language::Language;
 use crate::models::{ScrapeResult, ScrapedQuest};

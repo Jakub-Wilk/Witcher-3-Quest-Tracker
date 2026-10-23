@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use chrono::NaiveDateTime;
-use quest_db::{Connection, HeadSave, QuestStatus, SaveLink, playthroughs, progress, quests};
+use companion_db::{Connection, HeadSave, QuestStatus, SaveLink, playthroughs, progress, quests};
 use w3_formats::{JournalStatus, SaveSnapshot, SaveTime};
 
 /// A parsed save file.
@@ -168,7 +168,7 @@ pub fn scan(dir: &Path) -> Scan {
 }
 
 /// Routes a save to its playthrough and applies it when it is newer than the playthrough's head.
-pub fn process(conn: &mut Connection, save: &ParsedSave) -> quest_db::Result<Outcome> {
+pub fn process(conn: &mut Connection, save: &ParsedSave) -> companion_db::Result<Outcome> {
     let (Some(root), Some(key)) = (save.snapshot.lineage_root(), save.snapshot.self_key()) else {
         return Ok(Outcome::Ignored);
     };
@@ -188,14 +188,14 @@ pub fn process(conn: &mut Connection, save: &ParsedSave) -> quest_db::Result<Out
 }
 
 /// Links a run to an existing playthrough and applies its newest save.
-pub fn link(conn: &mut Connection, playthrough_id: i64, run: &DetectedRun) -> quest_db::Result<Outcome> {
+pub fn link(conn: &mut Connection, playthrough_id: i64, run: &DetectedRun) -> companion_db::Result<Outcome> {
     playthroughs::set_link(conn, playthrough_id, Some(&run.link()))?;
     progress::clear_manual_statuses_of_trackable(conn, playthrough_id)?;
     apply(conn, playthrough_id, &run.newest, false)
 }
 
 /// Writes a save's quest statuses and makes it the playthrough's head, in one transaction.
-fn apply(conn: &mut Connection, playthrough_id: i64, save: &ParsedSave, rollback: bool) -> quest_db::Result<Outcome> {
+fn apply(conn: &mut Connection, playthrough_id: i64, save: &ParsedSave, rollback: bool) -> companion_db::Result<Outcome> {
     let tx = conn.transaction()?;
     let ids = quests::journal_ids(&tx)?;
     let mut per_quest: HashMap<i64, Vec<JournalStatus>> = HashMap::new();
@@ -280,7 +280,7 @@ mod tests {
     use std::collections::HashMap;
 
     use super::*;
-    use quest_db::{NewPlaythrough, NewQuest, QuestSource, QuestText, QuestType, Region, open_in_memory};
+    use companion_db::{NewPlaythrough, NewQuest, QuestSource, QuestText, QuestType, Region, open_in_memory};
     use w3_formats::HistoryRecord;
 
     const QUEST_A: &str = "gameplay\\journal\\quests\\a.journal";

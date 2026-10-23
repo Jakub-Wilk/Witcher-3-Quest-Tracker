@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use dioxus::prelude::*;
-use quest_db::QuestStatus;
-use quest_scraper::ScrapeProgress;
+use companion_db::QuestStatus;
+use witcher_wiki::ScrapeProgress;
 
 use super::{PlaythroughModal, QuestCard};
 use crate::state::{AppState, SyncStatus};

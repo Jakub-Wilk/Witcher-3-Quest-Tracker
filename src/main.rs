@@ -27,7 +27,7 @@ fn main() {
     tracing_subscriber::fmt::init();
 
     let window = WindowBuilder::new()
-        .with_title("Witcher 3 Quest Tracker")
+        .with_title("Witcher 3 Companion")
         .with_inner_size(LogicalSize::new(1440.0, 900.0))
         .with_window_icon(dioxus::desktop::icon_from_memory(ICON_PNG).ok());
 
@@ -37,19 +37,53 @@ fn main() {
 }
 
 /// Opens (creating if needed) the DB in the OS data directory, with the settings file next to it.
-/// `W3QT_DATA_DIR` overrides the directory (for trying things out without touching real data).
+/// `W3C_DATA_DIR` (or the older `W3QT_DATA_DIR`) overrides the directory, for trying things out
+/// without touching real data.
 fn init_state() -> Result<AppState, String> {
-    let dir = match std::env::var_os("W3QT_DATA_DIR") {
+    let dir = match std::env::var_os("W3C_DATA_DIR").or_else(|| std::env::var_os("W3QT_DATA_DIR")) {
         Some(dir) => std::path::PathBuf::from(dir),
-        None => dirs::data_dir()
-            .ok_or("Could not determine the OS data directory")?
-            .join("witcher3_quest_tracker"),
+        None => {
+            let data = dirs::data_dir().ok_or("Could not determine the OS data directory")?;
+            let dir = data.join("witcher3_companion");
+            migrate_legacy_dir(&data.join("witcher3_quest_tracker"), &dir);
+            dir
+        }
     };
     std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create {}: {e}", dir.display()))?;
-    let db_path = dir.join("quests.db");
+    let db_path = dir.join("companion.db");
     tracing::info!("Using database at {}", db_path.display());
-    let conn = quest_db::open(&db_path).map_err(|e| e.to_string())?;
+    let conn = companion_db::open(&db_path).map_err(|e| e.to_string())?;
     Ok(AppState::new(conn, &dir.join("settings.toml")))
+}
+
+/// Copies the data of the app's former incarnation (Witcher 3 Quest Tracker) into the new data
+/// directory on first launch. The old directory is left in place.
+fn migrate_legacy_dir(old: &std::path::Path, new: &std::path::Path) {
+    if new.exists() || !old.join("quests.db").exists() {
+        return;
+    }
+    let copy = || -> std::io::Result<()> {
+        std::fs::create_dir_all(new)?;
+        for (from, to) in [
+            ("quests.db", "companion.db"),
+            ("quests.db-wal", "companion.db-wal"),
+            ("quests.db-shm", "companion.db-shm"),
+            ("settings.toml", "settings.toml"),
+        ] {
+            if old.join(from).exists() {
+                std::fs::copy(old.join(from), new.join(to))?;
+            }
+        }
+        Ok(())
+    };
+    match copy() {
+        Ok(()) => tracing::info!("Migrated data from {}", old.display()),
+        Err(e) => {
+            tracing::warn!("Could not migrate data from {}: {e}", old.display());
+            // Start clean rather than with a half-copied database.
+            let _ = std::fs::remove_dir_all(new);
+        }
+    }
 }
 
 #[component]
@@ -62,7 +96,7 @@ fn App() -> Element {
             Ok(state) => rsx! { Shell { state } },
             Err(e) => rsx! {
                 div { class: "fatal",
-                    h1 { "Could not open the quest database" }
+                    h1 { "Could not open the database" }
                     p { "{e}" }
                 }
             },

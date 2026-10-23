@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use quest_db::Playthrough;
+use companion_db::Playthrough;
 
 use super::{PlaythroughModal, SettingsModal};
 use crate::settings::language_label;
@@ -30,7 +30,7 @@ pub fn Header() -> Element {
 
     rsx! {
         header { class: "header",
-            h1 { class: "title", span { class: "title-mark", "W" } "Witcher 3 Quest Tracker" }
+            h1 { class: "title", span { class: "title-mark", "W" } "Witcher 3 Companion" }
             div { class: "header-actions",
                 div {
                     class: "tracker-status",

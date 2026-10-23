@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use rusqlite::{Connection, OptionalExtension, named_params, params};
 
 use super::util::{QUEST_COLUMNS, QUEST_FROM, map_quest};
-use crate::error::{QuestTrackerError, Result};
+use crate::error::{DbError, Result};
 use crate::models::{NewQuest, Quest, QuestText};
 
 /// Inserts or updates a quest by its journal path and replaces its texts. Returns the quest id
@@ -96,7 +96,7 @@ pub fn get(conn: &Connection, id: i64, language: &str) -> Result<Quest> {
             map_quest,
         )
         .optional()?
-        .ok_or(QuestTrackerError::QuestNotFound(id))?;
+        .ok_or(DbError::QuestNotFound(id))?;
     quest.prerequisite_ids = get_prerequisites(conn, id)?;
     Ok(quest)
 }
@@ -163,7 +163,7 @@ pub fn set_cutoff(conn: &Connection, id: i64, cutoff_quest_id: Option<i64>) -> R
         params![id, cutoff_quest_id],
     )?;
     if rows_affected == 0 {
-        return Err(QuestTrackerError::QuestNotFound(id));
+        return Err(DbError::QuestNotFound(id));
     }
     Ok(())
 }
@@ -173,7 +173,7 @@ pub fn set_sort_order(conn: &Connection, id: i64, sort_order: Option<i32>) -> Re
     let rows_affected =
         conn.execute("UPDATE quests SET sort_order = ?2 WHERE id = ?1", params![id, sort_order])?;
     if rows_affected == 0 {
-        return Err(QuestTrackerError::QuestNotFound(id));
+        return Err(DbError::QuestNotFound(id));
     }
     Ok(())
 }
@@ -225,7 +225,7 @@ pub fn all_prerequisites(conn: &Connection) -> Result<HashMap<i64, Vec<i64>>> {
 pub fn delete(conn: &Connection, id: i64) -> Result<()> {
     let rows_affected = conn.execute("DELETE FROM quests WHERE id = ?1", params![id])?;
     if rows_affected == 0 {
-        return Err(QuestTrackerError::QuestNotFound(id));
+        return Err(DbError::QuestNotFound(id));
     }
     Ok(())
 }
@@ -380,7 +380,7 @@ pub(crate) mod tests {
         // Deleting the cutoff target clears the reference.
         delete(&conn, b).unwrap();
         assert_eq!(get(&conn, a, "en").unwrap().cutoff_quest_id, None);
-        assert!(matches!(set_cutoff(&conn, 999, None), Err(QuestTrackerError::QuestNotFound(999))));
+        assert!(matches!(set_cutoff(&conn, 999, None), Err(DbError::QuestNotFound(999))));
     }
 
     #[test]

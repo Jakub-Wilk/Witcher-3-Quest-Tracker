@@ -20,7 +20,7 @@ pub use save_watcher::SaveWatcher;
 pub use settings_modal::SettingsModal;
 pub use sidebar::Sidebar;
 
-use quest_db::{QuestSource, QuestStatus, QuestType, Region};
+use companion_db::{QuestSource, QuestStatus, QuestType, Region};
 
 pub const SOURCES: [QuestSource; 3] =
     [QuestSource::BaseGame, QuestSource::HeartsOfStone, QuestSource::BloodAndWine];

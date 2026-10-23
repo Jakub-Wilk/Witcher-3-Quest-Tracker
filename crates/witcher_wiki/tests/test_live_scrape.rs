@@ -1,6 +1,6 @@
 //! Live tests against the Witcher wiki.
 
-use quest_scraper::{Language, WikiScraperClient, parse_quest};
+use witcher_wiki::{Language, WikiScraperClient, parse_quest};
 
 #[tokio::test]
 async fn live_fetch_and_parse_the_last_wish() {

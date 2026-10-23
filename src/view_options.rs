@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use quest_db::{Quest, QuestProgress, QuestSource, QuestStatus, QuestType, Region};
+use companion_db::{Quest, QuestProgress, QuestSource, QuestStatus, QuestType, Region};
 use serde::{Deserialize, Serialize};
 
 /// Quest statuses in the order the status filter shows them.

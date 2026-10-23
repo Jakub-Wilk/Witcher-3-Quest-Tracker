@@ -1,7 +1,7 @@
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::util::parse_timestamp;
-use crate::error::{QuestTrackerError, Result};
+use crate::error::{DbError, Result};
 use crate::models::{HeadSave, NewPlaythrough, Playthrough, PlaythroughUpdate, SaveLink};
 
 const COLUMNS: &str = "id, name, is_new_game_plus, notes, lineage_root,
@@ -26,11 +26,11 @@ pub fn insert(conn: &Connection, p: &NewPlaythrough) -> Result<i64> {
     Ok(conn.last_insert_rowid())
 }
 
-/// Retrieves a playthrough by its ID. Returns `QuestTrackerError::PlaythroughNotFound` if missing.
+/// Retrieves a playthrough by its ID. Returns `DbError::PlaythroughNotFound` if missing.
 pub fn get(conn: &Connection, id: i64) -> Result<Playthrough> {
     conn.query_row(&format!("SELECT {COLUMNS} FROM playthroughs WHERE id = ?1"), params![id], map_row)
         .optional()?
-        .ok_or(QuestTrackerError::PlaythroughNotFound(id))
+        .ok_or(DbError::PlaythroughNotFound(id))
 }
 
 /// Lists all playthroughs ordered by ID.
@@ -85,7 +85,7 @@ pub fn set_link(conn: &Connection, id: i64, link: Option<&SaveLink>) -> Result<(
         ],
     )?;
     if rows_affected == 0 {
-        return Err(QuestTrackerError::PlaythroughNotFound(id));
+        return Err(DbError::PlaythroughNotFound(id));
     }
     Ok(())
 }
@@ -98,7 +98,7 @@ pub fn set_head(conn: &Connection, id: i64, head: &HeadSave) -> Result<()> {
         params![id, head.key, head.file, head.saved_at],
     )?;
     if rows_affected == 0 {
-        return Err(QuestTrackerError::PlaythroughNotFound(id));
+        return Err(DbError::PlaythroughNotFound(id));
     }
     Ok(())
 }
@@ -107,7 +107,7 @@ pub fn set_head(conn: &Connection, id: i64, head: &HeadSave) -> Result<()> {
 pub fn delete(conn: &Connection, id: i64) -> Result<()> {
     let rows_affected = conn.execute("DELETE FROM playthroughs WHERE id = ?1", params![id])?;
     if rows_affected == 0 {
-        return Err(QuestTrackerError::PlaythroughNotFound(id));
+        return Err(DbError::PlaythroughNotFound(id));
     }
     Ok(())
 }

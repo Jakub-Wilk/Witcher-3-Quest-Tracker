@@ -180,8 +180,8 @@ mod tests {
         settings.ui.language = "pl".into();
         settings.ui.last_playthrough_id = Some(3);
         settings.view.sort = SortKey::Level;
-        settings.view.regions = vec![quest_db::Region::Velen, quest_db::Region::Skellige];
-        settings.view.statuses = vec![quest_db::QuestStatus::InProgress];
+        settings.view.regions = vec![companion_db::Region::Velen, companion_db::Region::Skellige];
+        settings.view.statuses = vec![companion_db::QuestStatus::InProgress];
         settings.view.search = "not saved".into();
         settings.tracking.watch_saves = false;
         settings.save(&path).unwrap();

@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use dioxus::prelude::*;
-use quest_db::{
+use companion_db::{
     CompletionSummary, Connection, NewPlaythrough, Playthrough, PlaythroughUpdate, Quest,
     QuestProgress, QuestStatus, playthroughs, progress, quests,
 };
@@ -109,7 +109,7 @@ impl AppState {
     }
 
     /// Records an error for display in the toast, returning `None` on failure.
-    pub fn report<T>(&mut self, result: quest_db::Result<T>) -> Option<T> {
+    pub fn report<T>(&mut self, result: companion_db::Result<T>) -> Option<T> {
         match result {
             Ok(value) => Some(value),
             Err(e) => {

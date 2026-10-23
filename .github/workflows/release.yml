@@ -31,20 +31,20 @@ jobs:
         id: version
         run: |
           base=$(cargo metadata --no-deps --format-version 1 \
-            | jq -r '.packages[] | select(.name == "witcher_3_quest_tracker") | .version')
+            | jq -r '.packages[] | select(.name == "witcher_3_companion") | .version')
           stamp=$(date -u +%Y%m%d%H%M%S)
           version="${base}.${stamp}"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "Release version: ${version}"
 
       - name: Build release
-        run: cargo build --release --locked -p witcher_3_quest_tracker
+        run: cargo build --release --locked -p witcher_3_companion
 
       - name: Package
         run: |
-          name="witcher_3_quest_tracker-${{ steps.version.outputs.version }}-windows-x64"
+          name="witcher_3_companion-${{ steps.version.outputs.version }}-windows-x64"
           mkdir -p dist
-          cp target/release/witcher_3_quest_tracker.exe "dist/${name}.exe"
+          cp target/release/witcher_3_companion.exe "dist/${name}.exe"
           cp LICENSE dist/
           (cd dist && 7z a "../${name}.zip" .)
           echo "ARCHIVE=${name}.zip" >> "$GITHUB_ENV"

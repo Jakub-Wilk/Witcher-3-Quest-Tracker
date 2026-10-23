@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use quest_db::QuestStatus;
+use companion_db::QuestStatus;
 
 use super::{QUEST_TYPES, SOURCES, region_label, source_label, type_label};
 use crate::state::AppState;

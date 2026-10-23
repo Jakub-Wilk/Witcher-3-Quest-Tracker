@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
-use quest_db::QuestSource;
+use companion_db::QuestSource;
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
 use serde_json::Value;
 
@@ -37,7 +37,7 @@ impl WikiScraperClient {
         let mut headers = HeaderMap::new();
         headers.insert(
             USER_AGENT,
-            HeaderValue::from_static("Witcher3QuestTracker/0.1 (desktop quest tracker; reqwest)"),
+            HeaderValue::from_static("Witcher3Companion/0.4 (desktop companion app; reqwest)"),
         );
         let client = reqwest::Client::builder()
             .default_headers(headers)
