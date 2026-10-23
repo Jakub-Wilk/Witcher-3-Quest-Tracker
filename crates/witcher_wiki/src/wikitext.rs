@@ -181,11 +181,17 @@ fn is_namespaced(target: &str) -> bool {
 /// and returns its parameters. Named parameters are keyed by lowercased name, positional
 /// ones by "1", "2", ...
 fn find_template(text: &str, name: &str) -> Option<HashMap<String, String>> {
+    find_templates(text, name).into_iter().next()
+}
+
+/// Every `{{name|...}}` template at any depth, in order, as [`find_template`] returns them.
+pub(crate) fn find_templates(text: &str, name: &str) -> Vec<HashMap<String, String>> {
+    let mut found = Vec::new();
     let mut search_from = 0;
     while let Some(rel) = text[search_from..].find("{{") {
         let start = search_from + rel;
         let body_start = start + 2;
-        let end = matching_close(text, body_start)?;
+        let Some(end) = matching_close(text, body_start) else { break };
         let body = &text[body_start..end];
         let parts = split_top_level(body);
         let template_name = parts[0].replace('_', " ").trim().to_lowercase();
@@ -203,11 +209,11 @@ fn find_template(text: &str, name: &str) -> Option<HashMap<String, String>> {
                     }
                 }
             }
-            return Some(params);
+            found.push(params);
         }
         search_from = body_start;
     }
-    None
+    found
 }
 
 /// Given the index just after an opening `{{`, returns the index of its matching `}}`.

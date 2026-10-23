@@ -67,7 +67,7 @@ impl ScrapeResult {
     }
 }
 
-/// Progress of [`crate::WikiScraperClient::fetch_all_quests`], for UI feedback.
+/// Progress of [`crate::WikiClient::fetch_all_quests`], for UI feedback.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScrapeProgress {
     ListingCategories,

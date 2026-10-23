@@ -1,38 +1,26 @@
 use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
-use companion_db::QuestSource;
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
 use serde_json::Value;
 
 use crate::error::{Result, ScraperError};
 use crate::language::Language;
-use crate::models::{ScrapeProgress, ScrapeResult, WikiPage};
-use crate::wikitext::{normalize_title, parse_quest, strip_disambiguator};
-
-/// Wiki categories listing every Witcher 3 quest. The expansion categories also tell the
-/// quest's source, used when the infobox type has no expansion suffix.
-pub const QUEST_CATEGORIES: &[(&str, Option<QuestSource>)] = &[
-    ("Category:The Witcher 3 main quests", None),
-    ("Category:The Witcher 3 secondary quests", None),
-    ("Category:The Witcher 3 contracts", None),
-    ("Category:The Witcher 3 treasure hunts", None),
-    ("Category:Hearts of Stone quests", Some(QuestSource::HeartsOfStone)),
-    ("Category:Blood and Wine quests", Some(QuestSource::BloodAndWine)),
-];
+use crate::models::WikiPage;
 
 /// MediaWiki's limit of titles per query for regular clients.
-const TITLES_PER_REQUEST: usize = 50;
+pub(crate) const TITLES_PER_REQUEST: usize = 50;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_RETRIES: u32 = 3;
 
-/// Async client for the Witcher Fandom wiki's MediaWiki API.
-pub struct WikiScraperClient {
+/// Async client for the Witcher Fandom wiki's MediaWiki API. The quest and item scrapers are in
+/// [`crate::quests`] and [`crate::items`].
+pub struct WikiClient {
     client: reqwest::Client,
     api_url: String,
 }
 
-impl WikiScraperClient {
+impl WikiClient {
     pub fn new() -> Result<Self> {
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -45,68 +33,6 @@ impl WikiScraperClient {
             .build()?;
 
         Ok(Self { client, api_url: "https://witcher.fandom.com/api.php".into() })
-    }
-
-    /// Scrapes every quest in [`QUEST_CATEGORIES`]: lists the categories, fetches all pages
-    /// as wikitext in batches, parses them and — for non-English `language` — fetches the
-    /// translated titles. Fails as a whole if any request fails, so callers never see a
-    /// partial quest list.
-    pub async fn fetch_all_quests(
-        &self,
-        language: Language,
-        mut on_progress: impl FnMut(ScrapeProgress),
-    ) -> Result<ScrapeResult> {
-        on_progress(ScrapeProgress::ListingCategories);
-        let mut source_hints: BTreeMap<String, Option<QuestSource>> = BTreeMap::new();
-        for &(category, hint) in QUEST_CATEGORIES {
-            for title in self.list_category(category).await? {
-                let entry = source_hints.entry(title).or_insert(None);
-                if hint.is_some() {
-                    *entry = hint;
-                }
-            }
-        }
-
-        let titles: Vec<String> = source_hints.keys().cloned().collect();
-        let pages = self
-            .fetch_pages(&titles, |done, total| on_progress(ScrapeProgress::FetchingPages { done, total }))
-            .await?;
-
-        let mut result = ScrapeResult { language, ..Default::default() };
-        for page in pages {
-            match parse_quest(&page) {
-                Ok(mut quest) => {
-                    if !quest.source_from_infobox {
-                        if let Some(Some(source)) = source_hints.get(&page.title) {
-                            quest.source = *source;
-                        }
-                    }
-                    result.aliases.insert(normalize_title(&page.title), page.page_id);
-                    for redirect in &page.redirects {
-                        result.aliases.insert(normalize_title(redirect), page.page_id);
-                    }
-                    result.quests.push(quest);
-                }
-                Err(e) => result.skipped.push((page.title, e.to_string())),
-            }
-        }
-
-        if language != Language::English {
-            let quest_titles: Vec<String> = result.quests.iter().map(|q| q.wiki_title.clone()).collect();
-            let translated = self
-                .fetch_langlinks(&quest_titles, language, |done, total| {
-                    on_progress(ScrapeProgress::Translating { done, total })
-                })
-                .await?;
-            for quest in &mut result.quests {
-                quest.localized_name = translated
-                    .get(&quest.wiki_title)
-                    .map(|t| strip_disambiguator(t).to_string())
-                    .filter(|t| !t.is_empty());
-            }
-        }
-
-        Ok(result)
     }
 
     /// Lists the article titles (main namespace only) in a category.
@@ -208,7 +134,7 @@ impl WikiScraperClient {
     }
 
     /// Runs a query, following MediaWiki `continue` tokens until the result is complete.
-    async fn query_all(&self, params: &[(&str, &str)], mut on_response: impl FnMut(&Value)) -> Result<()> {
+    pub(crate) async fn query_all(&self, params: &[(&str, &str)], mut on_response: impl FnMut(&Value)) -> Result<()> {
         let mut continuation: Vec<(String, String)> = Vec::new();
         loop {
             let mut all: Vec<(&str, &str)> = params.to_vec();
@@ -224,6 +150,22 @@ impl WikiScraperClient {
                         .collect();
                 }
                 None => return Ok(()),
+            }
+        }
+    }
+
+    /// Downloads a file (e.g. an image from the wiki's CDN), with the same retries as API calls.
+    pub async fn download(&self, url: &str) -> Result<Vec<u8>> {
+        let mut attempt = 0;
+        loop {
+            let response = self.client.get(url).send().await.and_then(reqwest::Response::error_for_status);
+            match response {
+                Ok(response) => return Ok(response.bytes().await?.to_vec()),
+                Err(e) if attempt < MAX_RETRIES && is_transient(&e) => {
+                    attempt += 1;
+                    tokio::time::sleep(Duration::from_millis(500 * 2u64.pow(attempt))).await;
+                }
+                Err(e) => return Err(e.into()),
             }
         }
     }
@@ -266,6 +208,6 @@ fn is_transient(e: &reqwest::Error) -> bool {
         || e.status().is_some_and(|s| s.as_u16() == 429 || s.is_server_error())
 }
 
-fn array(value: &Value) -> &[Value] {
+pub(crate) fn array(value: &Value) -> &[Value] {
     value.as_array().map(Vec::as_slice).unwrap_or_default()
 }

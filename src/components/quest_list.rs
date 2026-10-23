@@ -6,6 +6,7 @@ use witcher_wiki::ScrapeProgress;
 
 use super::{PlaythroughModal, QuestCard};
 use crate::state::{AppState, SyncStatus};
+use crate::item_sync::PictureProgress;
 use crate::sync_service::SyncPhase;
 
 /// Center panel: search, sync, and the filtered list of quest cards.
@@ -116,13 +117,19 @@ pub fn QuestList() -> Element {
 
 pub fn phase_text(phase: SyncPhase) -> String {
     match phase {
-        SyncPhase::ReadingGame => "Reading quests from the game files…".into(),
+        SyncPhase::ReadingGame => "Reading quests and items from the game files…".into(),
         SyncPhase::Wiki(ScrapeProgress::ListingCategories) => "Listing wiki categories…".into(),
         SyncPhase::Wiki(ScrapeProgress::FetchingPages { done, total }) => {
             format!("Fetching wiki pages: {done}/{total}")
         }
         SyncPhase::Wiki(ScrapeProgress::Translating { done, total }) => {
             format!("Fetching wiki translations: {done}/{total}")
+        }
+        SyncPhase::Pictures(PictureProgress::ReadingPages { done, total }) => {
+            format!("Fetching wiki item pages: {done}/{total}")
+        }
+        SyncPhase::Pictures(PictureProgress::Downloading { done, total }) => {
+            format!("Downloading item pictures: {done}/{total}")
         }
         SyncPhase::Merging => "Saving…".into(),
     }

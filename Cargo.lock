@@ -6222,6 +6222,7 @@ dependencies = [
  "companion_db",
  "dioxus",
  "dirs 7.0.0",
+ "futures-util",
  "notify",
  "open",
  "rfd",

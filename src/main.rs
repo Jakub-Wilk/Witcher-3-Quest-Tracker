@@ -3,6 +3,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod components;
+mod item_sync;
 mod save_tracker;
 mod settings;
 mod state;

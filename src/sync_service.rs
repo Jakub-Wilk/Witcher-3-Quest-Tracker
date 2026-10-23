@@ -1,4 +1,5 @@
-//! Full quest data sync: the game's own quest catalog, enriched with wiki data.
+//! Full data sync: the game's own quest catalog, enriched with wiki data, and its items and
+//! recipes with pictures from the wiki (see [`crate::item_sync`]).
 //!
 //! Syncing is split so no DB connection is held across `.await`:
 //! - [`fetch`] reads the game files (blocking task) and scrapes the wiki (async). Nothing is
@@ -12,14 +13,17 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::path::PathBuf;
 
 use companion_db::{Connection, NewQuest, QuestSource, QuestText, QuestType, Region, quests};
-use witcher_wiki::{Language, ScrapeProgress, ScrapeResult, ScrapedQuest, WikiScraperClient};
-use w3_formats::{Content, GameCatalog, GameQuest, JournalQuestType};
+use witcher_wiki::{Language, ScrapeProgress, ScrapeResult, ScrapedQuest, WikiClient};
+use w3_formats::{Content, GameCatalog, GameQuest, ItemCatalog, JournalQuestType};
+
+use crate::item_sync::{self, ItemReport, Picture, PictureProgress};
 
 /// What a running sync is doing, for the UI.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SyncPhase {
     ReadingGame,
     Wiki(ScrapeProgress),
+    Pictures(PictureProgress),
     Merging,
 }
 
@@ -28,6 +32,9 @@ pub struct Fetched {
     pub catalog: GameCatalog,
     /// `Err` holds why the wiki could not be scraped.
     pub wiki: Result<ScrapeResult, String>,
+    pub items: ItemCatalog,
+    /// Per item id; `Err` holds why the wiki's pictures could not be fetched.
+    pub pictures: Result<HashMap<String, Picture>, String>,
 }
 
 /// Summary of a [`merge`].
@@ -57,6 +64,7 @@ pub struct SyncReport {
     pub unresolved: Vec<String>,
     /// Set when the wiki could not be scraped and its previous data was kept.
     pub wiki_error: Option<String>,
+    pub items: ItemReport,
 }
 
 impl SyncReport {
@@ -79,6 +87,16 @@ impl SyncReport {
                 self.wiki_matched, self.wiki_only
             )),
         }
+        let items = &self.items;
+        if items.items > 0 {
+            msg.push_str(&format!(
+                " {} items with {} recipes ({} in New Game+), {} with pictures.",
+                items.items, items.base_recipes, items.plus_recipes, items.pictures
+            ));
+        }
+        if let Some(e) = &items.wiki_error {
+            msg.push_str(&format!(" Item pictures could not be fetched ({e})."));
+        }
         if !self.kept_stale.is_empty() {
             msg.push_str(&format!(
                 " {} quests are no longer in the game data but were kept because they have your notes or status.",
@@ -89,14 +107,21 @@ impl SyncReport {
     }
 }
 
-/// Reads the game catalog from `game_dir`, then scrapes the wiki.
-pub async fn fetch(game_dir: PathBuf, mut on_phase: impl FnMut(SyncPhase)) -> Result<Fetched, String> {
+/// Reads the quest and item catalogs from `game_dir`, then scrapes the wiki. `known_pictures`
+/// is the stored (wiki file, SHA-1) per item, so unchanged pictures are not downloaded again.
+pub async fn fetch(
+    game_dir: PathBuf,
+    known_pictures: HashMap<String, (String, String)>,
+    mut on_phase: impl FnMut(SyncPhase),
+) -> Result<Fetched, String> {
     on_phase(SyncPhase::ReadingGame);
-    let catalog = tokio::task::spawn_blocking(move || w3_formats::read_game_catalog(&game_dir))
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| format!("Could not read the game data: {e}"))?;
-    for warning in &catalog.warnings {
+    let (catalog, items) = tokio::task::spawn_blocking(move || {
+        Ok::<_, w3_formats::Error>((w3_formats::read_game_catalog(&game_dir)?, w3_formats::read_item_catalog(&game_dir)?))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| format!("Could not read the game data: {e}"))?;
+    for warning in catalog.warnings.iter().chain(&items.warnings) {
         tracing::warn!("Game data: {warning}");
     }
     if catalog.quests.is_empty() {
@@ -104,7 +129,7 @@ pub async fn fetch(game_dir: PathBuf, mut on_phase: impl FnMut(SyncPhase)) -> Re
     }
 
     let wiki = async {
-        let client = WikiScraperClient::new().map_err(|e| e.to_string())?;
+        let client = WikiClient::new().map_err(|e| e.to_string())?;
         let result = client
             .fetch_all_quests(Language::English, |p| on_phase(SyncPhase::Wiki(p)))
             .await
@@ -118,7 +143,12 @@ pub async fn fetch(game_dir: PathBuf, mut on_phase: impl FnMut(SyncPhase)) -> Re
     if let Err(e) = &wiki {
         tracing::warn!("Wiki scrape failed: {e}");
     }
-    Ok(Fetched { catalog, wiki })
+
+    let pictures = item_sync::fetch_pictures(&items, &known_pictures, |p| on_phase(SyncPhase::Pictures(p))).await;
+    if let Err(e) = &pictures {
+        tracing::warn!("Item pictures could not be fetched: {e}");
+    }
+    Ok(Fetched { catalog, wiki, items, pictures })
 }
 
 /// Merges fetched data into the DB in a single transaction:
@@ -268,6 +298,9 @@ pub fn merge(conn: &mut Connection, fetched: &Fetched) -> companion_db::Result<S
     let missing = quests::delete_missing(&tx, &seen)?;
     report.removed = missing.deleted;
     report.kept_stale = missing.kept;
+
+    // 6. Items, recipes and pictures
+    report.items = item_sync::merge(&tx, &fetched.items, &fetched.pictures)?;
 
     tx.commit()?;
     Ok(report)
@@ -679,7 +712,7 @@ mod tests {
     }
 
     fn fetched() -> Fetched {
-        Fetched { catalog: catalog(), wiki: Ok(mock_scrape_result()) }
+        Fetched { catalog: catalog(), wiki: Ok(mock_scrape_result()), items: Default::default(), pictures: Ok(Default::default()) }
     }
 
     fn id_of(conn: &Connection, n: u32) -> i64 {
@@ -793,7 +826,7 @@ mod tests {
         assert_eq!(raids.cutoff_quest_id, Some(id_of(&conn, 4)), "links resolve for wiki-only quests");
 
         // Offline re-sync keeps it.
-        let offline = Fetched { catalog: f.catalog.clone(), wiki: Err("offline".into()) };
+        let offline = Fetched { catalog: f.catalog.clone(), wiki: Err("offline".into()), items: Default::default(), pictures: Ok(Default::default()) };
         let report = merge(&mut conn, &offline).unwrap();
         assert_eq!(report.removed, 0);
         assert!(quests::get_id_by_journal_path(&conn, "wiki:1005").unwrap().is_some());
@@ -803,7 +836,7 @@ mod tests {
     fn wiki_failure_keeps_previous_wiki_data() {
         let mut conn = open_in_memory().unwrap();
         merge(&mut conn, &fetched()).unwrap();
-        let offline = Fetched { catalog: catalog(), wiki: Err("offline".into()) };
+        let offline = Fetched { catalog: catalog(), wiki: Err("offline".into()), items: Default::default(), pictures: Ok(Default::default()) };
         let report = merge(&mut conn, &offline).unwrap();
         assert_eq!(report.wiki_error.as_deref(), Some("offline"));
         assert!(report.summary().contains("previous data was kept"));
@@ -823,9 +856,12 @@ mod tests {
     async fn live_full_sync() {
         let Some(dir) = std::env::var_os("W3_GAME_DIR") else { return };
         let started = std::time::Instant::now();
-        let fetched = fetch(dir.into(), |_| {}).await.unwrap();
+        let fetched = fetch(dir.into(), HashMap::new(), |_| {}).await.unwrap();
         if let Err(e) = &fetched.wiki {
             panic!("wiki: {e}");
+        }
+        if let Err(e) = &fetched.pictures {
+            panic!("pictures: {e}");
         }
         let mut conn = open_in_memory().unwrap();
         let report = merge(&mut conn, &fetched).unwrap();
@@ -838,6 +874,10 @@ mod tests {
         let first: Vec<_> = all.iter().take(15).map(|q| q.title.as_str()).collect();
         println!("first in story order: {first:?}");
         assert!(report.wiki_matched > 300, "{}", report.wiki_matched);
+        let with_picture = companion_db::items::list(&conn, "en").unwrap();
+        let missing: Vec<_> = with_picture.iter().filter(|i| !i.has_image).map(|i| i.english_name.as_str()).collect();
+        println!("items without picture ({}): {missing:?}", missing.len());
+        assert!(report.items.pictures > 600, "{}", report.items.pictures);
     }
 
     #[test]

@@ -1,10 +1,10 @@
 //! Live tests against the Witcher wiki.
 
-use witcher_wiki::{Language, WikiScraperClient, parse_quest};
+use witcher_wiki::{Language, WikiClient, parse_quest};
 
 #[tokio::test]
 async fn live_fetch_and_parse_the_last_wish() {
-    let client = WikiScraperClient::new().expect("failed to create client");
+    let client = WikiClient::new().expect("failed to create client");
     let pages = client
         .fetch_pages(&["The Last Wish (quest)".to_string()], |_, _| {})
         .await
@@ -19,7 +19,7 @@ async fn live_fetch_and_parse_the_last_wish() {
 
 #[tokio::test]
 async fn live_langlinks_polish() {
-    let client = WikiScraperClient::new().expect("failed to create client");
+    let client = WikiClient::new().expect("failed to create client");
     let links = client
         .fetch_langlinks(&["The Last Wish (quest)".to_string()], Language::Polish, |_, _| {})
         .await

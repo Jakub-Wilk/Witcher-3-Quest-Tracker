@@ -408,12 +408,15 @@ impl AppState {
             self.sync.set(SyncStatus::Failed("Set the game folder in Settings first.".into()));
             return;
         };
+        let known_pictures = companion_db::items::image_hashes(&self.db.read());
+        let Some(known_pictures) = self.report(known_pictures) else { return };
         let mut state = *self;
         let mut sync = self.sync;
         sync.set(SyncStatus::Running(SyncPhase::ReadingGame));
         // Not tied to the component that triggered it: onboarding unmounts once quests exist.
         dioxus::core::spawn_forever(async move {
-            let fetched = match crate::sync_service::fetch(game_dir, move |p| sync.set(SyncStatus::Running(p))).await {
+            let on_phase = move |p| sync.set(SyncStatus::Running(p));
+            let fetched = match crate::sync_service::fetch(game_dir, known_pictures, on_phase).await {
                 Ok(fetched) => fetched,
                 Err(e) => {
                     tracing::error!("Sync failed: {e}");

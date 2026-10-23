@@ -466,7 +466,7 @@ mod tests {
             .join("crates/w3_formats/tests/fixtures/saves/ManualSave_55607_7ea49400_27df6a.sav");
         let catalog = w3_formats::read_game_catalog(Path::new(&game_dir)).unwrap();
         let mut conn = open_in_memory().unwrap();
-        crate::sync_service::merge(&mut conn, &crate::sync_service::Fetched { catalog, wiki: Err("offline".into()) })
+        crate::sync_service::merge(&mut conn, &crate::sync_service::Fetched { catalog, wiki: Err("offline".into()), items: Default::default(), pictures: Ok(Default::default()) })
             .unwrap();
 
         let saved = read(&fixture).unwrap();
