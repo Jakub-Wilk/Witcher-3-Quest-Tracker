@@ -166,7 +166,7 @@
   align-items: center;
   gap: 8px;
   height: 36px;
-  padding: 0 4px 0 11px;
+  padding: 0 4px 0 9px;
   border: 1px solid var(--line);
   border-radius: 18px;
   background: rgba(0, 0, 0, 0.35);
@@ -184,7 +184,7 @@
 }
 
 .save-time {
-  font-size: 1rem;
+  font-size: 0.86rem;
   font-weight: 700;
   color: var(--gold-bright);
   animation: qty-pop 0.45s var(--ease-spring);
@@ -200,17 +200,34 @@
   color: var(--muted);
 }
 
-.save-dot {
+.save-icon {
+  position: relative;
   flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: var(--gold);
+}
+
+.save-icon .icon { width: 19px; height: 19px; }
+.save-chip:not(.is-watching) .save-icon { color: var(--muted); }
+
+/* the watching light, on the icon's corner */
+.save-dot {
+  position: absolute;
+  inset-inline-end: -2px;
+  bottom: -1px;
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: var(--muted);
+  box-shadow: 0 0 0 2px #15110d;
 }
 
 .save-chip.is-watching .save-dot {
   background: var(--moss-bright);
-  box-shadow: 0 0 6px var(--moss-bright);
+  box-shadow: 0 0 0 2px #15110d, 0 0 6px var(--moss-bright);
   animation: save-pulse 2.4s ease-in-out infinite;
 }
 

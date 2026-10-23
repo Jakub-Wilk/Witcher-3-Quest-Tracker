@@ -87,6 +87,7 @@ pub enum Icon {
     Flask,
     Rune,
     Bag,
+    Save,
 }
 
 impl Icon {
@@ -114,6 +115,7 @@ impl Icon {
             Icon::Flask => &["M9.5 3h5M10 3v6L4.5 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3", "M7 15h10"],
             Icon::Rune => &["M12 3l7 9-7 9-7-9z", "M12 7v10M9 10l3 2 3-2"],
             Icon::Bag => &["M6 8h12l-1 12H7z", "M9 8V6a3 3 0 0 1 6 0v2"],
+            Icon::Save => &["M5 4h11l3 3v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z", "M8 4v5h7V4", "M8 20v-6h8v6"],
         }
     }
 }

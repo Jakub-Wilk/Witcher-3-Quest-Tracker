@@ -173,10 +173,13 @@ fn SaveChip() -> Element {
 
     rsx! {
         div { class, title: "{title}",
-            if scanning {
-                span { class: "save-spinner", title: t!(tr, "save.reading") }
-            } else {
-                span { class: "save-dot" }
+            span { class: "save-icon",
+                if scanning {
+                    span { class: "save-spinner", title: t!(tr, "save.reading") }
+                } else {
+                    Glyph { icon: Icon::Save }
+                    span { class: "save-dot" }
+                }
             }
             span { class: "save-when",
                 span { class: "save-time num", key: "{time}", "{time}" }
