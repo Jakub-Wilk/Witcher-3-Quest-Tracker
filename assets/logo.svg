@@ -1,11 +1,30 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <title>Witcher 3 Quest Tracker</title>
+  <title>Witcher 3 Companion</title>
   <defs>
-    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#e5b869"/>
-      <stop offset="1" stop-color="#c09443"/>
-    </linearGradient>
+    <radialGradient id="metal" cx="40%" cy="35%" r="70%">
+      <stop offset="0" stop-color="#ecd08f"/>
+      <stop offset=".55" stop-color="#a5874e"/>
+      <stop offset="1" stop-color="#4a3a22"/>
+    </radialGradient>
+    <radialGradient id="well" cx="50%" cy="40%" r="65%">
+      <stop offset="0" stop-color="#2a2014"/>
+      <stop offset="1" stop-color="#120e09"/>
+    </radialGradient>
   </defs>
-  <rect width="64" height="64" rx="17" fill="url(#gold)"/>
-  <path fill="#000" d="M10 16.5h9l3.05 14.54 5.25-14.54h9.4l5.25 14.54L45 16.5h9l-6.5 31h-9L32 29.5l-6.5 18h-9z"/>
+  <circle cx="32" cy="32" r="31" fill="url(#metal)" stroke="#1a140c" stroke-width="1.5"/>
+  <g stroke="#2a2014" stroke-width="1.6">
+    <line x1="32" y1="2.5" x2="32" y2="8" transform="rotate(0 32 32)"/>
+    <line x1="32" y1="2.5" x2="32" y2="8" transform="rotate(45 32 32)"/>
+    <line x1="32" y1="2.5" x2="32" y2="8" transform="rotate(90 32 32)"/>
+    <line x1="32" y1="2.5" x2="32" y2="8" transform="rotate(135 32 32)"/>
+    <line x1="32" y1="2.5" x2="32" y2="8" transform="rotate(180 32 32)"/>
+    <line x1="32" y1="2.5" x2="32" y2="8" transform="rotate(225 32 32)"/>
+    <line x1="32" y1="2.5" x2="32" y2="8" transform="rotate(270 32 32)"/>
+    <line x1="32" y1="2.5" x2="32" y2="8" transform="rotate(315 32 32)"/>
+  </g>
+  <circle cx="32" cy="32" r="23.5" fill="url(#well)" stroke="#c9a45c" stroke-width="1.5"/>
+  <g stroke="#ecd08f" stroke-width="3.2" fill="none" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M32 15.5 L47 42 L17 42 Z"/>
+    <path d="M32 26 V42 M24.5 36.5 L32 30 L39.5 36.5" stroke-width="2.6"/>
+  </g>
 </svg>
