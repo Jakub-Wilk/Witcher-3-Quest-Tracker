@@ -1,13 +1,16 @@
-use dioxus::prelude::*;
 use companion_db::{NewPlaythrough, Playthrough, PlaythroughUpdate};
+use dioxus::prelude::*;
 
-use super::format_local;
+use crate::components::format_local;
+use crate::components::ornament::Divider;
 use crate::state::AppState;
+use crate::t;
 
-/// Modal form for creating a playthrough, or editing `existing` (with a delete option).
+/// Modal form for creating a playthrough, or editing `existing` (with unlink and delete).
 #[component]
 pub fn PlaythroughModal(existing: Option<Playthrough>, on_close: EventHandler<()>) -> Element {
     let mut state = use_context::<AppState>();
+    let tr = *state.tr.read();
     let initial = existing.clone();
     let mut name = use_signal(|| initial.as_ref().map(|p| p.name.clone()).unwrap_or_default());
     let mut ng_plus = use_signal(|| initial.as_ref().is_some_and(|p| p.is_new_game_plus));
@@ -48,48 +51,45 @@ pub fn PlaythroughModal(existing: Option<Playthrough>, on_close: EventHandler<()
     rsx! {
         div { class: "modal-backdrop", onclick: move |_| on_close.call(()),
             form {
-                class: "modal card",
+                class: "modal panel",
                 onclick: move |e| e.stop_propagation(),
                 onsubmit: move |e| {
                     e.prevent_default();
                     save(());
                 },
-                h2 { if editing_id.is_some() { "Edit Playthrough" } else { "New Playthrough" } }
+                h2 { class: "modal-title",
+                    if editing_id.is_some() { {t!(tr, "playthrough.edit_title")} } else { {t!(tr, "playthrough.new_title")} }
+                }
+                Divider {}
                 label { class: "field",
-                    span { "Name" }
+                    span { {t!(tr, "playthrough.name")} }
                     input {
                         class: "input",
                         autofocus: true,
-                        placeholder: "e.g. Death March run",
+                        placeholder: t!(tr, "playthrough.name_placeholder"),
                         value: "{name}",
                         oninput: move |e| name.set(e.value()),
                     }
                 }
-                label { class: "field field-inline",
-                    input {
-                        r#type: "checkbox",
-                        checked: ng_plus(),
-                        onchange: move |e| ng_plus.set(e.checked()),
-                    }
-                    span { "New Game+" }
+                label { class: "toggle",
+                    input { r#type: "checkbox", checked: ng_plus(), onchange: move |e| ng_plus.set(e.checked()) }
+                    span { class: "toggle-track", span { class: "toggle-thumb" } }
+                    span { {t!(tr, "common.ng_plus")} }
+                    span { class: "muted small", {t!(tr, "playthrough.ng_plus_hint")} }
                 }
                 label { class: "field",
-                    span { "Notes" }
-                    textarea {
-                        class: "input",
-                        rows: 3,
-                        value: "{notes}",
-                        oninput: move |e| notes.set(e.value()),
-                    }
+                    span { {t!(tr, "playthrough.notes")} }
+                    textarea { class: "input", rows: 3, value: "{notes}", oninput: move |e| notes.set(e.value()) }
                 }
                 if let (Some(id), Some(link)) = (editing_id, link) {
                     div { class: "field link-info",
-                        span { "Save tracking" }
+                        span { {t!(tr, "playthrough.tracking")} }
                         p { class: "muted small",
-                            "Linked to the in-game run started {format_local(link.started_at)}"
-                            if let Some(game_id) = &link.game_playthrough_id { " (ID {game_id})" }
-                            "."
-                            if let Some(head) = &head { " Last save read: {head.file}, {format_local(head.saved_at)}." }
+                            {t!(tr, "playthrough.linked", started = format_local(tr, link.started_at))}
+                            if let Some(game_id) = &link.game_playthrough_id { " " {t!(tr, "run.game_id", id = game_id)} }
+                            if let Some(head) = &head {
+                                " " {t!(tr, "playthrough.last_save", file = head.file, time = format_local(tr, head.saved_at))}
+                            }
                         }
                         button {
                             class: "btn btn-ghost",
@@ -102,14 +102,14 @@ pub fn PlaythroughModal(existing: Option<Playthrough>, on_close: EventHandler<()
                                     confirm_unlink.set(true);
                                 }
                             },
-                            if confirm_unlink() { "Click again to stop tracking (save statuses are cleared)" } else { "Stop tracking saves" }
+                            if confirm_unlink() { {t!(tr, "playthrough.unlink_confirm")} } else { {t!(tr, "playthrough.unlink")} }
                         }
                     }
                 }
                 div { class: "modal-actions",
                     if let Some(id) = editing_id {
                         button {
-                            class: "btn btn-fail modal-delete",
+                            class: "btn btn-ghost danger modal-delete",
                             r#type: "button",
                             onclick: move |_| {
                                 if confirm_delete() {
@@ -119,15 +119,12 @@ pub fn PlaythroughModal(existing: Option<Playthrough>, on_close: EventHandler<()
                                     confirm_delete.set(true);
                                 }
                             },
-                            if confirm_delete() { "Click again to delete all progress" } else { "Delete" }
+                            if confirm_delete() { {t!(tr, "playthrough.delete_confirm")} } else { {t!(tr, "common.delete")} }
                         }
                     }
-                    button { class: "btn btn-ghost", r#type: "button", onclick: move |_| on_close.call(()), "Cancel" }
-                    button {
-                        class: "btn btn-primary",
-                        r#type: "submit",
-                        disabled: !can_save,
-                        if editing_id.is_some() { "Save" } else { "Create" }
+                    button { class: "btn btn-ghost", r#type: "button", onclick: move |_| on_close.call(()), {t!(tr, "common.cancel")} }
+                    button { class: "btn btn-gold", r#type: "submit", disabled: !can_save,
+                        if editing_id.is_some() { {t!(tr, "common.save")} } else { {t!(tr, "common.create")} }
                     }
                 }
             }

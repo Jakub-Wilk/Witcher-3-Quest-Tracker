@@ -1,7 +1,9 @@
 use dioxus::prelude::*;
 
-use super::format_local;
+use crate::components::format_local;
+use crate::components::ornament::Divider;
 use crate::state::{AppState, RunChoice};
+use crate::t;
 
 /// Asks what to do with the first in-game run found in the save folder that no playthrough
 /// tracks yet: create a playthrough for it, link it to an existing untracked one, or ignore it.
@@ -19,11 +21,16 @@ pub fn DetectedRuns() -> Element {
 #[component]
 fn RunPrompt(lineage_root: i64, remaining: usize) -> Element {
     let mut state = use_context::<AppState>();
+    let tr = *state.tr.read();
     let Some(run) = state.detected.read().iter().find(|r| r.lineage_root == lineage_root).cloned() else {
         return rsx! {};
     };
-    let started = format_local(run.started_at);
-    let default_name = format!("Playthrough started {}", run.started_at.map(|t| t.format("%Y-%m-%d").to_string()).unwrap_or_default());
+    let started = format_local(tr, run.started_at);
+    let default_name = t!(
+        tr,
+        "run.default_name",
+        date = run.started_at.map(|t| t.format("%Y-%m-%d").to_string()).unwrap_or_default()
+    );
     let mut name = use_signal(|| default_name);
     let mut ng_plus = use_signal(|| false);
     let unlinked: Vec<(i64, String)> = state
@@ -35,34 +42,33 @@ fn RunPrompt(lineage_root: i64, remaining: usize) -> Element {
         .collect();
     let mut link_target = use_signal(|| unlinked.first().map(|p| p.0));
     let newest = &run.newest;
-    let plural = if run.save_count == 1 { "" } else { "s" };
-    let newest_kind = newest.kind().to_lowercase();
-    let newest_at = format_local(newest.saved_at());
 
     rsx! {
         div { class: "modal-backdrop",
-            div { class: "modal card run-prompt",
-                h2 { "New playthrough found in your saves" }
+            div { class: "modal panel run-prompt",
+                h2 { class: "modal-title", {t!(tr, "run.title")} }
+                Divider {}
                 p {
-                    "A game started "
-                    strong { "{started}" }
-                    " has {run.save_count} save{plural}; the newest is a {newest_kind} from {newest_at}."
+                    {t!(tr, "run.summary", started = started, count = run.save_count,
+                        kind = crate::save_tracker::kind_label(tr, newest.kind()),
+                        newest = format_local(tr, newest.saved_at()))}
                 }
                 if let Some(id) = &run.game_playthrough_id {
-                    p { class: "muted small", "Game playthrough ID: {id}" }
+                    p { class: "muted small", {t!(tr, "run.game_id", id = id)} }
                 }
                 fieldset { class: "run-option",
-                    legend { "Track it as a new playthrough" }
+                    legend { {t!(tr, "run.create_legend")} }
                     label { class: "field",
-                        span { "Name" }
+                        span { {t!(tr, "playthrough.name")} }
                         input { class: "input", value: "{name}", oninput: move |e| name.set(e.value()) }
                     }
-                    label { class: "field field-inline",
+                    label { class: "toggle",
                         input { r#type: "checkbox", checked: ng_plus(), onchange: move |e| ng_plus.set(e.checked()) }
-                        span { "New Game+" }
+                        span { class: "toggle-track", span { class: "toggle-thumb" } }
+                        span { {t!(tr, "common.ng_plus")} }
                     }
                     button {
-                        class: "btn btn-primary",
+                        class: "btn btn-gold",
                         disabled: name.read().trim().is_empty(),
                         onclick: move |_| {
                             state.resolve_run(lineage_root, RunChoice::Create {
@@ -70,12 +76,12 @@ fn RunPrompt(lineage_root: i64, remaining: usize) -> Element {
                                 is_new_game_plus: ng_plus(),
                             });
                         },
-                        "Create playthrough"
+                        {t!(tr, "run.create")}
                     }
                 }
                 if !unlinked.is_empty() {
                     fieldset { class: "run-option",
-                        legend { "Or link it to a playthrough you already track by hand" }
+                        legend { {t!(tr, "run.link_legend")} }
                         select {
                             class: "select",
                             onchange: move |e| link_target.set(e.value().parse().ok()),
@@ -83,7 +89,7 @@ fn RunPrompt(lineage_root: i64, remaining: usize) -> Element {
                                 option { value: "{id}", selected: link_target() == Some(*id), "{pname}" }
                             }
                         }
-                        p { class: "muted small", "Quest statuses will come from your saves from now on; your notes and hand-ticked unmarked quests are kept." }
+                        p { class: "muted small", {t!(tr, "run.link_hint")} }
                         button {
                             class: "btn btn-ghost",
                             disabled: link_target().is_none(),
@@ -92,19 +98,19 @@ fn RunPrompt(lineage_root: i64, remaining: usize) -> Element {
                                     state.resolve_run(lineage_root, RunChoice::Link(id));
                                 }
                             },
-                            "Link"
+                            {t!(tr, "run.link")}
                         }
                     }
                 }
                 div { class: "modal-actions",
                     if remaining > 0 {
-                        span { class: "muted small", "{remaining} more to review" }
+                        span { class: "muted small", {t!(tr, "run.remaining", n = remaining)} }
                     }
                     button {
                         class: "btn btn-ghost",
-                        title: "Don't track this run (can be undone in Settings)",
+                        title: t!(tr, "run.ignore_hint"),
                         onclick: move |_| state.resolve_run(lineage_root, RunChoice::Ignore),
-                        "Ignore"
+                        {t!(tr, "run.ignore")}
                     }
                 }
             }

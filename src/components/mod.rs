@@ -1,26 +1,12 @@
-mod cutoff_pane;
-mod detected_runs;
-mod header;
-mod onboarding;
-mod playthrough_modal;
-mod quest_card;
-mod quest_list;
-mod save_watcher;
-mod settings_modal;
-mod sidebar;
-
-pub use cutoff_pane::CutoffPane;
-pub use detected_runs::DetectedRuns;
-pub use header::Header;
-pub use onboarding::{Onboarding, OnboardingStep};
-pub use playthrough_modal::PlaythroughModal;
-pub use quest_card::QuestCard;
-pub use quest_list::QuestList;
-pub use save_watcher::SaveWatcher;
-pub use settings_modal::SettingsModal;
-pub use sidebar::Sidebar;
+pub mod ornament;
+pub mod quests;
+pub mod shell;
+pub mod workbench;
 
 use companion_db::{QuestSource, QuestStatus, QuestType, Region};
+
+use crate::i18n::Tr;
+use crate::t;
 
 pub const SOURCES: [QuestSource; 3] =
     [QuestSource::BaseGame, QuestSource::HeartsOfStone, QuestSource::BloodAndWine];
@@ -33,41 +19,50 @@ pub const QUEST_TYPES: [QuestType; 5] = [
     QuestType::ScavengerHunt,
 ];
 
-pub fn source_label(source: QuestSource) -> &'static str {
+pub fn source_label(tr: Tr, source: QuestSource) -> &'static str {
     match source {
-        QuestSource::BaseGame => "Base",
-        QuestSource::HeartsOfStone => "HoS",
-        QuestSource::BloodAndWine => "B&W",
+        QuestSource::BaseGame => t!(tr, "source.base"),
+        QuestSource::HeartsOfStone => t!(tr, "source.hos"),
+        QuestSource::BloodAndWine => t!(tr, "source.baw"),
     }
 }
 
-pub fn type_label(quest_type: QuestType) -> &'static str {
+pub fn type_label(tr: Tr, quest_type: QuestType) -> &'static str {
     match quest_type {
-        QuestType::MainQuest => "Main",
-        QuestType::SecondaryQuest => "Secondary",
-        QuestType::WitcherContract => "Contracts",
-        QuestType::TreasureHunt => "Treasure Hunts",
-        QuestType::ScavengerHunt => "Scavenger Hunts",
+        QuestType::MainQuest => t!(tr, "type.main"),
+        QuestType::SecondaryQuest => t!(tr, "type.secondary"),
+        QuestType::WitcherContract => t!(tr, "type.contract"),
+        QuestType::TreasureHunt => t!(tr, "type.treasure"),
+        QuestType::ScavengerHunt => t!(tr, "type.scavenger"),
     }
 }
 
-pub fn region_label(region: Region) -> &'static str {
+pub fn region_label(tr: Tr, region: Region) -> &'static str {
     match region {
-        Region::WhiteOrchard => "White Orchard",
-        Region::Velen => "Velen",
-        Region::Novigrad => "Novigrad",
-        Region::Oxenfurt => "Oxenfurt",
-        Region::Skellige => "Skellige",
-        Region::KaerMorhen => "Kaer Morhen",
-        Region::Vizima => "Vizima",
-        Region::Toussaint => "Toussaint",
-        Region::Unknown => "Unknown region",
+        Region::WhiteOrchard => t!(tr, "region.white_orchard"),
+        Region::Velen => t!(tr, "region.velen"),
+        Region::Novigrad => t!(tr, "region.novigrad"),
+        Region::Oxenfurt => t!(tr, "region.oxenfurt"),
+        Region::Skellige => t!(tr, "region.skellige"),
+        Region::KaerMorhen => t!(tr, "region.kaer_morhen"),
+        Region::Vizima => t!(tr, "region.vizima"),
+        Region::Toussaint => t!(tr, "region.toussaint"),
+        Region::Unknown => t!(tr, "region.unknown"),
+    }
+}
+
+pub fn status_label(tr: Tr, status: QuestStatus) -> &'static str {
+    match status {
+        QuestStatus::NotStarted => t!(tr, "status.not_started"),
+        QuestStatus::InProgress => t!(tr, "status.in_progress"),
+        QuestStatus::Completed => t!(tr, "status.completed"),
+        QuestStatus::Failed => t!(tr, "status.failed"),
     }
 }
 
 /// A local date and time from a save, e.g. `2026-10-06 00:39`.
-pub fn format_local(time: Option<chrono::NaiveDateTime>) -> String {
-    time.map(|t| t.format("%Y-%m-%d %H:%M").to_string()).unwrap_or_else(|| "unknown time".into())
+pub fn format_local(tr: Tr, time: Option<chrono::NaiveDateTime>) -> String {
+    time.map(|t| t.format("%Y-%m-%d %H:%M").to_string()).unwrap_or_else(|| t!(tr, "common.unknown_time").into())
 }
 
 /// Opens a folder picker starting at `start`.
@@ -84,7 +79,7 @@ pub fn is_open(status: QuestStatus) -> bool {
     matches!(status, QuestStatus::NotStarted | QuestStatus::InProgress)
 }
 
-/// URL of a quest's page on the Witcher wiki.
+/// URL of a page on the Witcher wiki.
 pub fn wiki_url(wiki_title: &str) -> String {
     let mut url = String::from("https://witcher.fandom.com/wiki/");
     for byte in wiki_title.replace(' ', "_").bytes() {

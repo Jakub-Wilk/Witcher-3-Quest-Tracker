@@ -1,0 +1,801 @@
+/* ==========================================================================
+   Witcher 3 Companion: dark medieval theme (tokens, surfaces, controls, motion)
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  --ink: #0d0b09;
+  --stone: #15120f;
+  --leather: #1d1813;
+  --leather-2: #261f18;
+  --leather-3: #30271d;
+  --line: #3d3124;
+  --line-soft: #2b2219;
+
+  --parchment: #e9dcc0;
+  --parchment-dim: #b9a888;
+  --muted: #8c7c62;
+
+  --gold: #c9a45c;
+  --gold-bright: #ecd08f;
+  --gold-deep: #8a6c35;
+  --blood: #8e1c18;
+  --blood-bright: #c0352c;
+  --rose: #f0a59a;
+  --moss: #5f9a3f;
+  --moss-bright: #8ed063;
+  --ember: #e0703a;
+
+  --tier-common: #d9d1c1;
+  --tier-master: #6b9be0;
+  --tier-magic: #e6c54f;
+  --tier-relic: #e08a3c;
+  --tier-set: #74bb5c;
+
+  --radius: 3px;
+  --font-display: "Cinzel", "Trajan Pro", Georgia, serif;
+  --font-body: "IM Fell English", "EB Garamond", Georgia, "Times New Roman", serif;
+  --font-num: "EB Garamond", Georgia, serif;
+
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out: cubic-bezier(0.6, 0, 0.4, 1);
+
+  --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* Fonts by script: Cinzel and IM Fell only cover Latin. */
+[data-script="latin-ext"] { --font-body: "EB Garamond", Georgia, serif; }
+[data-script="cyrillic"] {
+  --font-display: "EB Garamond", Georgia, serif;
+  --font-body: "EB Garamond", Georgia, serif;
+}
+[data-script="arabic"] {
+  --font-display: "Amiri", "Cinzel", serif;
+  --font-body: "Amiri", "EB Garamond", serif;
+}
+[data-script="cjk"] {
+  --font-display: "Cinzel", "Yu Mincho", "MS Mincho", "Batang", "SimSun", "MingLiU", serif;
+  --font-body: "Yu Mincho", "MS Mincho", "Batang", "Malgun Gothic", "SimSun", "Microsoft YaHei", "MingLiU", "Microsoft JhengHei", serif;
+}
+[lang="ko"] { --font-body: "Batang", "Malgun Gothic", serif; }
+[lang="zh-Hans"] { --font-body: "SimSun", "Microsoft YaHei", serif; }
+[lang="zh-Hant"] { --font-body: "MingLiU", "Microsoft JhengHei", serif; }
+/* Letter-spacing and italics mangle these scripts. */
+[data-script="cjk"] *,
+[data-script="arabic"] * {
+  letter-spacing: 0 !important;
+  font-style: normal !important;
+}
+[data-script="cyrillic"] .brand-title,
+[data-script="cyrillic"] .section-title,
+[data-script="cyrillic"] .panel-head h2 { letter-spacing: 0.04em; }
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--ink);
+}
+
+body {
+  color: var(--parchment);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.45;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+#main { height: 100%; }
+
+.app {
+  position: relative;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-body);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+button:disabled { cursor: default; opacity: 0.45; }
+
+a { color: var(--gold); }
+
+:focus-visible {
+  outline: 1px solid var(--gold-bright);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--blood);
+  color: var(--parchment);
+}
+
+.muted { color: var(--muted); }
+.small { font-size: 0.85rem; }
+.gold { color: var(--gold); }
+
+/* Cinzel and IM Fell draw "1" like an "I": numbers use EB Garamond lining figures. */
+.num,
+.count,
+.stepper-value,
+.progress-figure {
+  font-family: var(--font-num);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.icon {
+  width: 1.15em;
+  height: 1.15em;
+  flex: none;
+  vertical-align: -0.2em;
+}
+
+/* scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold-deep) transparent;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--gold-deep), #5a4624);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* ---------------------------------------------------------------- backdrop */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(201, 164, 92, 0.09), transparent 70%),
+    radial-gradient(ellipse 60% 50% at 85% 100%, rgba(142, 28, 24, 0.12), transparent 70%),
+    radial-gradient(ellipse 140% 100% at 50% 50%, transparent 40%, rgba(0, 0, 0, 0.75)),
+    var(--grain),
+    linear-gradient(180deg, #17130f 0%, #0d0b09 60%);
+  background-size: auto, auto, auto, 180px 180px, auto;
+  animation: backdrop-breathe 14s ease-in-out infinite alternate;
+}
+
+@keyframes backdrop-breathe {
+  from { filter: brightness(1); }
+  to { filter: brightness(1.08); }
+}
+
+/* ---------------------------------------------------------------- panels */
+
+.panel {
+  position: relative;
+  padding: 18px 18px 20px;
+  background:
+    linear-gradient(180deg, rgba(255, 240, 200, 0.025), transparent 120px),
+    var(--grain),
+    linear-gradient(160deg, var(--leather-2), var(--leather) 40%, var(--stone));
+  background-size: auto, 180px 180px, auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow:
+    inset 0 0 0 4px var(--leather),
+    inset 0 0 0 5px rgba(201, 164, 92, 0.22),
+    inset 0 0 40px rgba(0, 0, 0, 0.6),
+    0 18px 40px rgba(0, 0, 0, 0.55);
+}
+
+/* gilded corner rivets */
+.panel::before,
+.panel::after {
+  content: "";
+  position: absolute;
+  top: 9px;
+  width: 7px;
+  height: 7px;
+  transform: rotate(45deg);
+  background: linear-gradient(135deg, var(--gold-bright), var(--gold-deep));
+  box-shadow: 0 0 6px rgba(201, 164, 92, 0.45);
+  pointer-events: none;
+}
+
+.panel::before { inset-inline-start: 9px; }
+.panel::after { inset-inline-end: 9px; }
+
+.panel-head h2 {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+  text-shadow: 0 0 14px rgba(201, 164, 92, 0.18);
+}
+
+.panel-head .divider {
+  margin: 6px auto 14px;
+  max-width: 300px;
+}
+
+.divider {
+  display: block;
+  width: 100%;
+  height: 14px;
+  color: var(--gold-deep);
+}
+
+.section-title {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.74rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold-deep);
+}
+
+/* ---------------------------------------------------------------- medallion */
+
+.medallion {
+  flex: none;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.7));
+}
+
+.medallion .medallion-sign { animation: sign-glow 4s ease-in-out infinite; }
+.medallion.is-idle { animation: medallion-hum 7s ease-in-out infinite; }
+.medallion.is-spinning { animation: medallion-spin 2.4s var(--ease-in-out) infinite; }
+.medallion.is-spinning .medallion-sign { animation-duration: 0.9s; }
+
+@keyframes sign-glow {
+  0%, 100% { filter: drop-shadow(0 0 0 transparent); opacity: 0.85; }
+  50% { filter: drop-shadow(0 0 4px rgba(236, 208, 143, 0.9)); opacity: 1; }
+}
+
+/* The medallion hums now and then, as it does near magic. */
+@keyframes medallion-hum {
+  0%, 90%, 100% { transform: rotate(0); }
+  92% { transform: rotate(-5deg); }
+  94% { transform: rotate(5deg); }
+  96% { transform: rotate(-3deg); }
+  98% { transform: rotate(2deg); }
+}
+
+@keyframes medallion-spin { to { transform: rotate(360deg); } }
+
+/* ---------------------------------------------------------------- buttons */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius);
+  font-family: var(--font-display);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: color 0.2s, border-color 0.2s, background 0.2s, box-shadow 0.2s, transform 0.15s, filter 0.2s;
+}
+
+.btn:active:not(:disabled) { transform: translateY(1px) scale(0.98); }
+
+.btn-ghost {
+  border: 1px solid var(--line);
+  color: var(--parchment-dim);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  color: var(--gold-bright);
+  border-color: var(--gold-deep);
+  background: rgba(201, 164, 92, 0.06);
+}
+
+.btn-ghost.danger:hover:not(:disabled) {
+  color: var(--rose);
+  border-color: var(--blood-bright);
+  background: rgba(142, 28, 24, 0.15);
+}
+
+.btn-ghost.small,
+.btn.small { padding: 3px 9px; font-size: 0.66rem; }
+
+.btn-gold {
+  border: 1px solid var(--gold-deep);
+  color: var(--ink);
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold) 55%, var(--gold-deep));
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.btn-gold:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 0 18px rgba(201, 164, 92, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+/* wax seal */
+.btn-seal {
+  padding: 9px 18px 9px 12px;
+  border-radius: 22px;
+  color: #f6dcc8;
+  background: radial-gradient(circle at 30% 30%, #d2493c, var(--blood) 55%, #4e0d0b);
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.2),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.4),
+    0 3px 10px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
+}
+
+.btn-seal:hover:not(:disabled) {
+  filter: brightness(1.15);
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.2),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.4),
+    0 0 18px rgba(192, 53, 44, 0.6);
+}
+
+.btn-seal:active:not(:disabled) { transform: scale(0.93) rotate(-4deg); }
+
+.btn-icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--gold);
+  background: radial-gradient(circle at 50% 35%, rgba(255, 230, 180, 0.06), rgba(0, 0, 0, 0.4));
+  transition: color 0.2s, border-color 0.2s, box-shadow 0.25s, transform 0.25s var(--ease-spring);
+}
+
+.btn-icon .icon { width: 17px; height: 17px; }
+
+.btn-icon:hover:not(:disabled) {
+  color: var(--gold-bright);
+  border-color: var(--gold-deep);
+  box-shadow: 0 0 12px rgba(201, 164, 92, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-icon.is-busy .icon,
+.btn-icon.is-busy:disabled .icon { animation: medallion-spin 1.1s linear infinite; }
+.btn-icon.is-busy:disabled { opacity: 1; color: var(--gold-bright); }
+.btn-icon.has-notes { color: var(--gold-bright); border-color: var(--gold-deep); }
+
+.btn-x {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--muted);
+  transition: color 0.2s, background 0.2s, transform 0.25s var(--ease-spring);
+}
+
+.btn-x:hover {
+  color: var(--blood-bright);
+  background: rgba(142, 28, 24, 0.15);
+  transform: rotate(90deg);
+}
+
+.btn-link {
+  color: var(--gold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.btn-link:hover { color: var(--gold-bright); }
+
+.is-link {
+  text-align: start;
+  transition: color 0.2s;
+}
+
+.is-link:hover { color: var(--gold-bright); }
+
+/* ---------------------------------------------------------------- chips */
+
+.chips {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+}
+
+.chips-wrap { flex-wrap: wrap; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 11px;
+  border-radius: 2px;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--parchment-dim);
+  background-size: 100% 200%;
+  background-image: linear-gradient(180deg, transparent 50%, var(--gold-bright) 50%, var(--gold) 80%, var(--gold-deep));
+  background-position: 0 0;
+  transition: color 0.25s, background-position 0.35s var(--ease-out), box-shadow 0.3s;
+}
+
+.chip:hover:not(.is-active) { color: var(--gold-bright); }
+
+.chip.is-active {
+  color: var(--ink);
+  background-position: 0 100%;
+  box-shadow: 0 0 10px rgba(201, 164, 92, 0.35);
+}
+
+/* ---------------------------------------------------------------- inputs */
+
+.input,
+.select,
+.search-box input {
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.6);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input {
+  width: 100%;
+  padding: 8px 10px;
+}
+
+.input:focus,
+.select:focus,
+.search-box input:focus {
+  outline: none;
+  border-color: var(--gold-deep);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.6), 0 0 0 3px rgba(201, 164, 92, 0.12);
+}
+
+.input::placeholder,
+.search-box input::placeholder {
+  color: var(--muted);
+  font-style: italic;
+}
+
+textarea.input { resize: vertical; }
+
+.select {
+  padding: 6px 28px 6px 10px;
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0 L5 6 L10 0 Z' fill='%23c9a45c'/></svg>") no-repeat right 10px center,
+    rgba(0, 0, 0, 0.45);
+  appearance: none;
+  max-width: 100%;
+}
+
+[dir="rtl"] .select { padding: 6px 10px 6px 28px; background-position: left 10px center, 0 0; }
+
+.select option { background: var(--leather); color: var(--parchment); }
+
+.search-box {
+  position: relative;
+  display: block;
+}
+
+.search-glyph {
+  position: absolute;
+  inset-inline-start: 12px;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  transform: translateY(-50%);
+  color: var(--gold-deep);
+  pointer-events: none;
+  transition: color 0.2s;
+}
+
+.search-box input {
+  width: 100%;
+  padding-block: 10px;
+  padding-inline: 40px 14px;
+  font-size: 1.02rem;
+}
+
+.search-box:focus-within .search-glyph { color: var(--gold-bright); }
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 12px 0;
+}
+
+.field > span:first-child {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold-deep);
+}
+
+/* toggle switch around a hidden checkbox */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  user-select: none;
+}
+
+.toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toggle-track {
+  position: relative;
+  flex: none;
+  width: 32px;
+  height: 18px;
+  padding: 2px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.6);
+  box-shadow: inset 0 0 0 1px var(--line);
+  transition: background 0.25s;
+}
+
+.toggle-thumb {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--gold-bright), var(--gold-deep));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  transition: transform 0.3s var(--ease-spring);
+}
+
+.toggle input:checked + .toggle-track { background: rgba(142, 28, 24, 0.6); box-shadow: inset 0 0 0 1px var(--blood-bright), 0 0 10px rgba(192, 53, 44, 0.3); }
+.toggle input:checked + .toggle-track .toggle-thumb { transform: translateX(14px); }
+[dir="rtl"] .toggle input:checked + .toggle-track .toggle-thumb { transform: translateX(-14px); }
+.toggle input:focus-visible + .toggle-track { outline: 1px solid var(--gold-bright); outline-offset: 2px; }
+.toggle.is-disabled { opacity: 0.45; cursor: default; }
+
+/* ---------------------------------------------------------------- badges */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--parchment-dim);
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.badge-muted { color: var(--muted); }
+.badge-source { color: var(--gold); border-color: rgba(201, 164, 92, 0.3); }
+.badge-done { color: var(--moss-bright); border-color: rgba(142, 208, 99, 0.45); background: rgba(95, 154, 63, 0.12); }
+.badge-failed { color: var(--rose); border-color: rgba(192, 53, 44, 0.5); background: rgba(142, 28, 24, 0.15); }
+.badge-active { color: var(--gold-bright); border-color: var(--gold-deep); background: rgba(201, 164, 92, 0.1); }
+.badge-hos { color: #e0705f; border-color: rgba(224, 112, 95, 0.4); }
+.badge-baw { color: #c78bd6; border-color: rgba(199, 139, 214, 0.4); }
+.badge-queued { color: var(--gold-bright); border-color: var(--gold-deep); background: rgba(201, 164, 92, 0.12); }
+
+/* ---------------------------------------------------------------- item icons & tiers */
+
+.item-icon {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 3px;
+  border-radius: 2px;
+  background: radial-gradient(circle at 50% 40%, rgba(255, 230, 180, 0.08), rgba(0, 0, 0, 0.45));
+  box-shadow: inset 0 0 0 1px rgba(201, 164, 92, 0.18), inset 0 0 10px rgba(0, 0, 0, 0.7);
+}
+
+.item-icon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 2px;
+  box-shadow: inset 0 -2px 0 currentColor;
+  opacity: 0.6;
+}
+
+.item-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.7));
+  animation: fade-in 0.35s var(--ease-out);
+}
+
+.item-icon-fallback {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.tier-q1 { color: var(--tier-common); }
+.tier-q2 { color: var(--tier-master); }
+.tier-q3 { color: var(--tier-magic); }
+.tier-q4 { color: var(--tier-relic); }
+.tier-q5 { color: var(--tier-set); }
+.item-icon.tier-q1::after { opacity: 0.15; }
+
+/* ---------------------------------------------------------------- stepper */
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.stepper-btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: var(--gold);
+  transition: color 0.2s, background 0.2s;
+}
+
+.stepper-btn .icon { width: 14px; height: 14px; }
+.stepper-btn:hover:not(:disabled) { color: var(--gold-bright); background: rgba(201, 164, 92, 0.12); }
+
+.stepper-value {
+  min-width: 26px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.02rem;
+  animation: qty-pop 0.35s var(--ease-spring);
+}
+
+@keyframes qty-pop {
+  from { transform: scale(1.5); color: var(--gold-bright); }
+  to { transform: scale(1); }
+}
+
+/* ---------------------------------------------------------------- progress */
+
+.progress-bar {
+  position: relative;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  box-shadow: inset 0 0 0 1px var(--line), inset 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+
+.progress-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: linear-gradient(90deg, var(--gold-deep), var(--gold) 70%, var(--gold-bright));
+  box-shadow: 0 0 10px rgba(201, 164, 92, 0.5);
+  transition: transform 0.8s var(--ease-out);
+}
+
+[dir="rtl"] .progress-fill { transform-origin: right center; }
+
+/* a glint running along the bar */
+.progress-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 245, 220, 0.55) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: glint 3.5s ease-in-out infinite;
+}
+
+@keyframes glint {
+  0% { background-position: 150% 0; }
+  60%, 100% { background-position: -50% 0; }
+}
+
+/* ---------------------------------------------------------------- empty states */
+
+.empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--parchment-dim);
+  animation: rise 0.5s var(--ease-out) both;
+}
+
+.empty h3 {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  letter-spacing: 0.06em;
+  color: var(--gold);
+}
+
+.empty p { margin: 0 0 14px; font-style: italic; }
+.empty-note { font-style: italic; margin: 6px 2px; }
+
+.empty-glyph {
+  width: 42px;
+  height: 42px;
+  margin-bottom: 8px;
+  color: var(--gold-deep);
+  animation: medallion-hum 5s ease-in-out infinite;
+}
+
+/* ---------------------------------------------------------------- motion */
+
+@keyframes fade-in { from { opacity: 0; } }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+}
+
+@keyframes rise-scale {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+}
+
+@keyframes slide-in-end {
+  from { opacity: 0; transform: translateX(40px) scale(0.96); }
+}
+
+[dir="rtl"] { --slide-dir: -1; }
+
+@keyframes unfold {
+  from { opacity: 0; transform: translateY(-8px); clip-path: inset(0 0 100% 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0s !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -19,6 +19,9 @@ use chrono::NaiveDateTime;
 use companion_db::{Connection, HeadSave, QuestStatus, SaveLink, items, planner, playthroughs, progress, quests};
 use w3_formats::{JournalStatus, SaveSnapshot, SaveTime};
 
+use crate::i18n::Tr;
+use crate::t;
+
 /// A parsed save file.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedSave {
@@ -36,16 +39,16 @@ impl ParsedSave {
     }
 
     /// Save kind from the file name: `ManualSave`, `AutoSave`, `QuickSave` or `CheckPoint`.
-    pub fn kind(&self) -> &'static str {
+    pub fn kind(&self) -> SaveKind {
         let name = self.file_name();
         if name.starts_with("QuickSave") {
-            "Quicksave"
+            SaveKind::Quick
         } else if name.starts_with("AutoSave") {
-            "Autosave"
+            SaveKind::Auto
         } else if name.starts_with("CheckPoint") {
-            "Checkpoint"
+            SaveKind::Checkpoint
         } else {
-            "Manual save"
+            SaveKind::Manual
         }
     }
 
@@ -56,6 +59,23 @@ impl ParsedSave {
             game_playthrough_id: self.snapshot.playthrough_id.clone(),
             started_at: root.to_datetime(),
         })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SaveKind {
+    Manual,
+    Quick,
+    Auto,
+    Checkpoint,
+}
+
+pub fn kind_label(tr: Tr, kind: SaveKind) -> &'static str {
+    match kind {
+        SaveKind::Manual => t!(tr, "save.kind_manual"),
+        SaveKind::Quick => t!(tr, "save.kind_quick"),
+        SaveKind::Auto => t!(tr, "save.kind_auto"),
+        SaveKind::Checkpoint => t!(tr, "save.kind_checkpoint"),
     }
 }
 
@@ -551,6 +571,6 @@ mod tests {
             .unwrap();
         assert_eq!(remastered.0.file_name(), "ManualSave_55607_7ea49400_27df6a.sav");
         assert_eq!(remastered.1, 3);
-        assert_eq!(remastered.0.kind(), "Manual save");
+        assert_eq!(remastered.0.kind(), SaveKind::Manual);
     }
 }

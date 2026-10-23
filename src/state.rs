@@ -5,19 +5,22 @@ use std::path::{Path, PathBuf};
 use dioxus::prelude::*;
 use companion_db::{
     CompletionSummary, Connection, NewPlaythrough, Playthrough, PlaythroughUpdate, Quest,
-    QuestProgress, QuestStatus, playthroughs, progress, quests,
+    QuestProgress, QuestStatus, RecipeMode, items, planner, playthroughs, progress, quests, recipes,
 };
 
+use crate::i18n::Tr;
 use crate::save_tracker::{self, DetectedRun, Outcome, ParsedSave, Scan};
-use crate::settings::AppSettings;
-use crate::sync_service::SyncPhase;
+use crate::settings::{AppSettings, Tab};
+use crate::sync_service::{SyncPhase, SyncReport};
+use crate::t;
 use crate::view_options::ViewOptions;
+use crate::workbench::{Catalog, Plan, WorkbenchOptions, label_keys};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SyncStatus {
     Idle,
     Running(SyncPhase),
-    Done(String),
+    Done(Box<SyncReport>),
     Failed(String),
 }
 
@@ -25,7 +28,7 @@ pub enum SyncStatus {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TrackerStatus {
     pub scanning: bool,
-    /// e.g. "Quicksave 22:39 → Death March run".
+    /// e.g. "Quicksave 22:39 → Death March run", in the interface language.
     pub last: Option<String>,
 }
 
@@ -42,7 +45,8 @@ pub enum RunChoice {
 pub struct AppState {
     /// The SQLite connection. A `CopyValue` (not a `Signal`) since it is not reactive itself.
     pub db: CopyValue<Connection>,
-    /// Persisted settings, except the quest list options, which live in `view`.
+    /// Persisted settings, except the quest list and workbench options, which live in `view`
+    /// and `bench`.
     pub settings: Signal<AppSettings>,
     pub settings_path: CopyValue<PathBuf>,
     pub playthroughs: Signal<Vec<Playthrough>>,
@@ -52,9 +56,17 @@ pub struct AppState {
     pub summary: Signal<CompletionSummary>,
     /// Quest list filters and sort order; persisted with the settings on change.
     pub view: Signal<ViewOptions>,
-    /// Languages with quest text.
-    pub languages: Signal<Vec<String>>,
     pub quest_count: Signal<i64>,
+    pub item_count: Signal<i64>,
+    /// Translator for the interface language.
+    pub tr: Signal<Tr>,
+    pub tab: Signal<Tab>,
+    /// Items and the recipe set of the current playthrough (New Game+ or not).
+    pub catalog: Signal<Catalog>,
+    /// The current playthrough's crafting plan and inventory.
+    pub plan: Signal<Plan>,
+    /// Recipe browser filters; persisted with the settings on change.
+    pub bench: Signal<WorkbenchOptions>,
     pub sync: Signal<SyncStatus>,
     pub tracker: Signal<TrackerStatus>,
     /// In-game runs found in the save folder that are not linked to a playthrough yet.
@@ -76,6 +88,9 @@ impl AppState {
     pub fn new(conn: Connection, settings_path: &Path) -> Self {
         let settings = AppSettings::load(settings_path);
         let view = settings.view.clone();
+        let bench = settings.workbench.clone();
+        let tr = Tr::new(&settings.ui.language);
+        let tab = settings.ui.tab;
         let last_playthrough = settings.ui.last_playthrough_id;
 
         let mut state = Self {
@@ -87,8 +102,13 @@ impl AppState {
             rows: Signal::new(Vec::new()),
             summary: Signal::new(CompletionSummary::default()),
             view: Signal::new(view),
-            languages: Signal::new(Vec::new()),
             quest_count: Signal::new(0),
+            item_count: Signal::new(0),
+            tr: Signal::new(tr),
+            tab: Signal::new(tab),
+            catalog: Signal::new(Catalog::default()),
+            plan: Signal::new(Plan::default()),
+            bench: Signal::new(bench),
             sync: Signal::new(SyncStatus::Idle),
             tracker: Signal::new(TrackerStatus::default()),
             detected: Signal::new(Vec::new()),
@@ -105,6 +125,7 @@ impl AppState {
         };
         state.current.set(initial);
         state.reload();
+        state.reload_workbench();
         state
     }
 
@@ -125,9 +146,10 @@ impl AppState {
         let path = self.settings_path.read().clone();
         let mut settings = self.settings.peek().clone();
         settings.view = self.view.peek().clone();
+        settings.workbench = self.bench.peek().clone();
         if let Err(e) = settings.save(&path) {
             tracing::error!("Failed to save {}: {e}", path.display());
-            self.error.set(Some(format!("Could not save settings: {e}")));
+            self.error.set(Some(t!(self.tr.peek(), "error.save_settings", error = e)));
         }
     }
 
@@ -141,10 +163,17 @@ impl AppState {
         self.settings.peek().ui.language.clone()
     }
 
-    /// Switches the quest text language (display only).
+    /// Switches the interface and game text language.
     pub fn set_language(&mut self, language: String) {
+        self.tr.set(Tr::new(&language));
         self.update_settings(|s| s.ui.language = language);
         self.reload();
+        self.reload_workbench();
+    }
+
+    pub fn set_tab(&mut self, tab: Tab) {
+        self.tab.set(tab);
+        self.update_settings(|s| s.ui.tab = tab);
     }
 
     pub fn reload_playthroughs(&mut self) {
@@ -154,16 +183,99 @@ impl AppState {
         }
     }
 
-    /// Re-reads the quest count and available languages.
+    /// Re-reads the quest and item counts.
     pub fn reload_catalog_info(&mut self) {
         let info = {
             let conn = self.db.read();
-            quests::count(&conn).and_then(|n| Ok((n, quests::languages(&conn)?)))
+            quests::count(&conn).and_then(|n| Ok((n, items::count(&conn)?)))
         };
-        if let Some((count, languages)) = self.report(info) {
-            self.quest_count.set(count);
-            self.languages.set(languages);
+        if let Some((quests, items)) = self.report(info) {
+            self.quest_count.set(quests);
+            self.item_count.set(items);
         }
+    }
+
+    /// The recipe set of the current playthrough.
+    pub fn recipe_mode(&self) -> RecipeMode {
+        let current = *self.current.peek();
+        let plus = self.playthroughs.peek().iter().any(|p| Some(p.id) == current && p.is_new_game_plus);
+        if plus { RecipeMode::Plus } else { RecipeMode::Base }
+    }
+
+    /// Re-reads items and recipes (in the current language and mode), then the plan.
+    pub fn reload_workbench(&mut self) {
+        let language = self.language();
+        let mode = self.recipe_mode();
+        let loaded = {
+            let conn = self.db.read();
+            items::list(&conn, &language).and_then(|items| {
+                let recipes = recipes::list(&conn, mode)?;
+                let categories: std::collections::HashSet<String> = items.iter().map(|i| i.category.clone()).collect();
+                let keys = label_keys(categories.into_iter());
+                let keys: Vec<&str> = keys.iter().map(String::as_str).collect();
+                let labels = items::game_texts(&conn, &language, &keys)?;
+                Ok(Catalog::new(items, recipes, labels))
+            })
+        };
+        if let Some(catalog) = self.report(loaded) {
+            self.catalog.set(catalog);
+        }
+        self.reload_plan();
+    }
+
+    /// Re-reads the current playthrough's plan and inventory.
+    pub fn reload_plan(&mut self) {
+        let Some(pt) = *self.current.peek() else {
+            self.plan.set(Plan::default());
+            return;
+        };
+        let loaded = {
+            let conn = self.db.read();
+            planner::queue(&conn, pt).and_then(|queue| {
+                Ok(Plan {
+                    queue,
+                    collected: planner::collected(&conn, pt)?,
+                    craft_self: planner::craft_self(&conn, pt)?,
+                    inventory: planner::inventory(&conn, pt)?,
+                })
+            })
+        };
+        if let Some(plan) = self.report(loaded) {
+            self.plan.set(plan);
+        }
+    }
+
+    /// Runs a planner change for the current playthrough and reloads the plan.
+    fn change_plan(&mut self, change: impl FnOnce(&Connection, i64) -> companion_db::Result<()>) {
+        let Some(pt) = *self.current.peek() else { return };
+        let result = change(&self.db.read(), pt);
+        if self.report(result).is_some() {
+            self.reload_plan();
+        }
+    }
+
+    pub fn plan_add(&mut self, item_id: &str, qty: u32) {
+        self.change_plan(|conn, pt| planner::add(conn, pt, item_id, qty));
+    }
+
+    pub fn plan_set_qty(&mut self, item_id: &str, qty: u32) {
+        self.change_plan(|conn, pt| planner::set_qty(conn, pt, item_id, qty));
+    }
+
+    pub fn plan_set_variant(&mut self, item_id: &str, variant: usize) {
+        self.change_plan(|conn, pt| planner::set_variant(conn, pt, item_id, variant));
+    }
+
+    pub fn plan_set_collected(&mut self, item_id: &str, on: bool) {
+        self.change_plan(|conn, pt| planner::set_collected(conn, pt, item_id, on));
+    }
+
+    pub fn plan_set_craft_self(&mut self, item_id: &str, on: bool) {
+        self.change_plan(|conn, pt| planner::set_craft_self(conn, pt, item_id, on));
+    }
+
+    pub fn plan_clear(&mut self) {
+        self.change_plan(planner::clear);
     }
 
     /// Re-reads quests, progress and the summary for the current playthrough.
@@ -192,6 +304,7 @@ impl AppState {
             self.update_settings(|s| s.ui.last_playthrough_id = id);
         }
         self.reload();
+        self.reload_workbench();
     }
 
     pub fn create_playthrough(&mut self, new: NewPlaythrough) -> Option<i64> {
@@ -206,6 +319,8 @@ impl AppState {
         let updated = playthroughs::update(&self.db.read(), id, &update);
         if self.report(updated).is_some() {
             self.reload_playthroughs();
+            // New Game+ switches the recipe set.
+            self.reload_workbench();
         }
     }
 
@@ -272,17 +387,16 @@ impl AppState {
     fn after_apply(&mut self, playthrough_id: i64, save: &ParsedSave, rollback: bool, reverted: usize) {
         self.reload_playthroughs();
         let name = self.playthrough_name(playthrough_id);
+        let tr = *self.tr.peek();
         let time = save.saved_at().map(|t| t.format("%H:%M").to_string()).unwrap_or_default();
-        self.tracker.write().last = Some(format!("{} {time} → {name}", save.kind()));
+        let kind = save_tracker::kind_label(tr, save.kind());
+        self.tracker.write().last = Some(t!(tr, "save.last", kind = kind, time = time, name = name));
         if rollback && reverted > 0 {
-            self.notice.set(Some(format!(
-                "An earlier save of “{name}” was loaded: {reverted} quest{} went back to how they were in {}.",
-                if reverted == 1 { "" } else { "s" },
-                save.file_name()
-            )));
+            self.notice.set(Some(t!(tr, "save.rollback", name = name, n = reverted, file = save.file_name())));
         }
         if *self.current.peek() == Some(playthrough_id) {
             self.reload();
+            self.reload_plan();
         }
     }
 
@@ -360,7 +474,7 @@ impl AppState {
                 Ok(scan) => state.apply_scan(scan),
                 Err(e) => {
                     state.tracker.write().scanning = false;
-                    state.error.set(Some(format!("Could not scan saves: {e}")));
+                    state.error.set(Some(t!(state.tr.peek(), "error.scan", error = e)));
                 }
             }
         });
@@ -405,7 +519,7 @@ impl AppState {
             return;
         }
         let Some(game_dir) = self.settings.peek().valid_game_dir().map(Path::to_path_buf) else {
-            self.sync.set(SyncStatus::Failed("Set the game folder in Settings first.".into()));
+            self.sync.set(SyncStatus::Failed(t!(self.tr.peek(), "sync.no_game_folder").into()));
             return;
         };
         let known_pictures = companion_db::items::image_hashes(&self.db.read());
@@ -440,9 +554,10 @@ impl AppState {
                     for title in &report.unresolved {
                         tracing::debug!("Unresolved quest link: {title}");
                     }
-                    sync.set(SyncStatus::Done(report.summary()));
+                    sync.set(SyncStatus::Done(Box::new(report)));
                     state.reload_catalog_info();
                     state.reload();
+                    state.reload_workbench();
                     state.rescan_saves(true);
                 }
                 Err(e) => sync.set(SyncStatus::Failed(e.to_string())),

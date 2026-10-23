@@ -2,24 +2,25 @@
 // app. Debug builds keep the console for tracing output.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod assets;
 mod components;
+mod i18n;
 mod item_sync;
 mod save_tracker;
 mod settings;
 mod state;
 mod sync_service;
 mod view_options;
+mod workbench;
 
 use dioxus::desktop::{Config, LogicalSize, WindowBuilder};
 use dioxus::prelude::*;
 
-use components::{
-    CutoffPane, DetectedRuns, Header, Onboarding, OnboardingStep, QuestList, SaveWatcher, Sidebar,
-};
+use components::quests::QuestsView;
+use components::shell::{DetectedRuns, Header, Onboarding, OnboardingStep, SaveWatcher, SyncBanner, Toasts};
+use components::workbench::WorkbenchView;
+use settings::Tab;
 use state::AppState;
-
-/// Inlined rather than loaded via `asset!` so a plain `cargo run` works without the `dx` CLI.
-const STYLE: &str = include_str!("../assets/style.css");
 
 /// Rendered from `assets/logo.svg` by `scripts/render_icons.py`.
 const ICON_PNG: &[u8] = include_bytes!("../assets/icon.png");
@@ -92,13 +93,15 @@ fn App() -> Element {
     let init = use_hook(init_state);
 
     rsx! {
-        style { {STYLE} }
+        style { {assets::STYLE} }
+        div { class: "backdrop" }
         match init {
             Ok(state) => rsx! { Shell { state } },
             Err(e) => rsx! {
-                div { class: "fatal",
-                    h1 { "Could not open the database" }
-                    p { "{e}" }
+                div { class: "fatal panel",
+                    h1 { "Witcher 3 Companion" }
+                    p { "Could not open the database." }
+                    p { class: "muted", "{e}" }
                 }
             },
         }
@@ -108,15 +111,23 @@ fn App() -> Element {
 #[component]
 fn Shell(state: AppState) -> Element {
     let mut state = use_context_provider(|| state);
-    // Lets the user continue without quest data this session.
+    assets::use_asset_routes(state);
+    // Lets the user continue without game data this session.
     let mut sync_skipped = use_signal(|| false);
 
-    // Persist filters and sort order whenever they change (search text is not saved, so
-    // typing in the search box does not write the file).
-    let mut saved = use_hook(|| CopyValue::new(toml::to_string(&*state.view.peek()).unwrap_or_default()));
+    // Persist the quest and workbench filters whenever they change (search text is not saved,
+    // so typing in a search box does not write the file).
+    let snapshot = move || {
+        let view = toml::to_string(&*state.view.read()).unwrap_or_default();
+        let bench = toml::to_string(&*state.bench.read()).unwrap_or_default();
+        view + &bench
+    };
+    let mut saved = use_hook(|| CopyValue::new(String::new()));
     use_effect(move || {
-        let current = toml::to_string(&*state.view.read()).unwrap_or_default();
-        if *saved.peek() != current {
+        let current = snapshot();
+        if saved.peek().is_empty() {
+            saved.set(current);
+        } else if *saved.peek() != current {
             state.save_settings();
             saved.set(current);
         }
@@ -126,49 +137,44 @@ fn Shell(state: AppState) -> Element {
     let save_dir = settings.valid_save_dir().map(|d| d.display().to_string());
     let game_dir_ok = settings.valid_game_dir().is_some();
     let watch = settings.tracking.watch_saves;
+    let language = i18n::language(&settings.ui.language);
     drop(settings);
-    let has_quests = *state.quest_count.read() > 0;
+    let has_data = *state.quest_count.read() > 0 || *state.item_count.read() > 0;
+    let tab = *state.tab.read();
 
     let step = if save_dir.is_none() {
         Some(OnboardingStep::SaveDir)
     } else if !game_dir_ok {
         Some(OnboardingStep::GameDir)
-    } else if !has_quests && !sync_skipped() {
+    } else if !has_data && !sync_skipped() {
         Some(OnboardingStep::Sync)
     } else {
         None
     };
 
     rsx! {
-        div { class: "app",
+        div {
+            class: "app",
+            lang: language.tag,
+            dir: if language.rtl() { "rtl" } else { "ltr" },
+            "data-script": language.script.attr(),
             if let Some(step) = step {
                 Onboarding { step, on_skip_sync: move |_| sync_skipped.set(true) }
             } else {
                 Header {}
-                div { class: "panes",
-                    Sidebar {}
-                    QuestList {}
-                    CutoffPane {}
+                SyncBanner {}
+                match tab {
+                    Tab::Quests => rsx! { QuestsView {} },
+                    Tab::Workbench => rsx! { WorkbenchView {} },
                 }
                 if let Some(dir) = save_dir.clone() {
-                    if has_quests {
+                    if has_data {
                         SaveWatcher { key: "{dir}-{watch}", dir, watch }
                     }
                 }
                 DetectedRuns {}
             }
-            if let Some(notice) = state.notice.read().clone() {
-                div { class: "toast toast-info",
-                    span { "{notice}" }
-                    button { class: "toast-close", onclick: move |_| state.notice.set(None), "✕" }
-                }
-            }
-            if let Some(err) = state.error.read().clone() {
-                div { class: "toast toast-error",
-                    span { "{err}" }
-                    button { class: "toast-close", onclick: move |_| state.error.set(None), "✕" }
-                }
-            }
+            Toasts {}
         }
     }
 }

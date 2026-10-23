@@ -1,0 +1,327 @@
+/* ==========================================================================
+   Quests: filters & progress | journal | cutoffs
+   ========================================================================== */
+
+.quests-view {
+  grid-template-columns: 270px minmax(0, 1fr) 310px;
+}
+
+@media (max-width: 1180px) {
+  .quests-view { grid-template-columns: 240px minmax(0, 1fr); }
+  .cutoff-pane { display: none; }
+}
+
+.sidebar,
+.cutoff-pane { overflow-y: auto; }
+
+.cutoff-pane .panel-head h2 { font-size: 0.95rem; letter-spacing: 0.1em; }
+
+.sidebar section { margin-bottom: 16px; }
+
+/* ---------------------------------------------------------------- progress */
+
+.progress-section { text-align: center; }
+
+.progress-figure {
+  font-size: 2.6rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--gold-bright);
+  text-shadow: 0 0 18px rgba(201, 164, 92, 0.35);
+  animation: rise 0.6s 0.2s var(--ease-out) both;
+}
+
+.progress-figure span {
+  font-size: 1.1rem;
+  color: var(--gold-deep);
+  margin-inline-start: 2px;
+}
+
+.progress-ring .progress-bar { margin: 10px 0 6px; }
+.progress-stats { font-size: 0.9rem; color: var(--parchment-dim); }
+.progress-failed { margin-top: 2px; font-size: 0.85rem; color: var(--rose); }
+.sidebar .divider { margin: 4px 0 14px; }
+
+/* ---------------------------------------------------------------- categories */
+
+.categories {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+}
+
+.category {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-inline-start: 2px solid transparent;
+  border-radius: 2px;
+  cursor: pointer;
+  color: var(--parchment-dim);
+  transition: background 0.2s, color 0.2s, border-color 0.3s, padding 0.3s var(--ease-out);
+}
+
+.category:hover { background: rgba(201, 164, 92, 0.06); color: var(--parchment); }
+
+.category.is-active {
+  padding-inline-start: 14px;
+  border-inline-start-color: var(--gold);
+  background: linear-gradient(90deg, rgba(201, 164, 92, 0.16), transparent);
+  color: var(--gold-bright);
+}
+
+[dir="rtl"] .category.is-active { background: linear-gradient(-90deg, rgba(201, 164, 92, 0.16), transparent); }
+.category .count { font-size: 0.85rem; color: var(--muted); }
+.reset-filters { margin-top: 10px; width: 100%; }
+
+/* ---------------------------------------------------------------- journal */
+
+.quest-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.quest-pane .search-box { flex: none; margin-bottom: 12px; }
+
+.quest-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-inline-end: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.list-footer {
+  flex: none;
+  margin-top: 10px;
+  text-align: center;
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--muted);
+}
+
+.quest-card {
+  position: relative;
+  padding: 9px 10px;
+  border: 1px solid var(--line-soft);
+  border-inline-start: 3px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(100deg, rgba(255, 240, 200, 0.03), rgba(0, 0, 0, 0.25));
+  animation: rise 0.4s var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 28ms);
+  transition: border-color 0.3s, background 0.3s, box-shadow 0.3s, transform 0.25s var(--ease-out);
+}
+
+.quest-card:hover {
+  border-color: var(--line);
+  transform: translateX(2px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+}
+
+[dir="rtl"] .quest-card:hover { transform: translateX(-2px); }
+
+.quest-card.is-active { border-inline-start-color: var(--gold); }
+.quest-card.is-completed { border-inline-start-color: var(--moss); background: linear-gradient(100deg, rgba(95, 154, 63, 0.08), rgba(0, 0, 0, 0.25)); }
+.quest-card.is-completed .quest-name > span:first-child { color: var(--parchment-dim); }
+.quest-card.is-failed { border-inline-start-color: var(--blood); background: linear-gradient(100deg, rgba(142, 28, 24, 0.1), rgba(0, 0, 0, 0.25)); }
+.quest-card.is-failed .quest-name > span:first-child { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(192, 53, 44, 0.6); }
+
+/* the next quest of the story is about to lock this one out */
+.quest-card.is-cutoff {
+  border-inline-start-color: var(--ember);
+  animation: rise 0.4s var(--ease-out) both, ember 2.6s ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * 28ms), 0s;
+}
+
+@keyframes ember {
+  50% { box-shadow: inset 0 0 18px rgba(224, 112, 58, 0.18), 0 0 12px rgba(224, 112, 58, 0.12); }
+}
+
+.quest-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* the completion seal */
+.quest-seal {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  border-radius: 50%;
+  border: 1px solid var(--gold-deep);
+  background: radial-gradient(circle at 35% 30%, rgba(255, 230, 180, 0.08), rgba(0, 0, 0, 0.55));
+  color: var(--ink);
+  transition: background 0.3s, border-color 0.3s, box-shadow 0.3s, transform 0.3s var(--ease-spring);
+}
+
+.quest-seal:hover:not(:disabled):not(.is-readonly) {
+  transform: scale(1.12);
+  box-shadow: 0 0 10px rgba(201, 164, 92, 0.4);
+}
+
+.quest-seal .icon {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.6;
+}
+
+.quest-seal .icon path {
+  stroke-dasharray: 26;
+  animation: draw 0.4s var(--ease-out) both;
+}
+
+@keyframes draw { from { stroke-dashoffset: 26; } }
+
+.is-completed .quest-seal {
+  border-color: var(--moss-bright);
+  background: radial-gradient(circle at 35% 30%, var(--moss-bright), var(--moss) 60%, #2f5a1d);
+  box-shadow: 0 0 10px rgba(142, 208, 99, 0.35);
+  animation: seal-pop 0.45s var(--ease-spring);
+}
+
+.is-failed .quest-seal {
+  border-color: var(--blood-bright);
+  background: radial-gradient(circle at 35% 30%, #d2493c, var(--blood) 60%, #4e0d0b);
+  color: #f6dcc8;
+}
+
+.quest-seal.is-readonly { border-style: dashed; cursor: default; }
+
+@keyframes seal-pop {
+  0% { transform: scale(0.6); }
+  60% { transform: scale(1.18); }
+}
+
+.quest-main { flex: 1; min-width: 0; }
+
+.quest-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
+
+.quest-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 2px;
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--muted);
+}
+
+.quest-warning,
+.quest-important {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 5px;
+  font-size: 0.88rem;
+}
+
+.quest-warning { color: var(--ember); }
+.quest-important { color: var(--gold); white-space: pre-line; }
+.quest-warning .icon,
+.quest-important .icon { margin-top: 2px; }
+
+.quest-override {
+  margin-top: 4px;
+  font-size: 0.82rem;
+  font-style: italic;
+  color: var(--muted);
+}
+
+.quest-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quest-actions .btn-icon { width: 28px; height: 28px; }
+.quest-actions .btn-icon .icon { width: 15px; height: 15px; }
+
+.notes-drawer {
+  margin: 8px 0 2px 34px;
+  animation: unfold 0.35s var(--ease-out) both;
+}
+
+[dir="rtl"] .notes-drawer { margin: 8px 34px 2px 0; }
+
+.quest-desc {
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: linear-gradient(170deg, rgba(233, 220, 192, 0.07), rgba(0, 0, 0, 0.2));
+  box-shadow: inset 0 0 0 1px rgba(201, 164, 92, 0.12);
+  font-style: italic;
+  color: var(--parchment-dim);
+  white-space: pre-line;
+}
+
+/* ---------------------------------------------------------------- cutoffs */
+
+.cutoff {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-inline-start: 3px solid var(--gold-deep);
+  border-radius: var(--radius);
+  background: rgba(0, 0, 0, 0.25);
+  animation: rise 0.45s var(--ease-out) both;
+  animation-delay: calc(0.2s + var(--i, 0) * 50ms);
+}
+
+.cutoff.is-active {
+  border-inline-start-color: var(--ember);
+  animation: rise 0.45s var(--ease-out) both, ember 2.6s ease-in-out infinite;
+  animation-delay: calc(0.2s + var(--i, 0) * 50ms), 0s;
+}
+
+.cutoff-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-family: var(--font-display);
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--gold-bright);
+}
+
+.cutoff.is-active .cutoff-name { color: var(--ember); }
+
+.risk-list {
+  margin: 6px 0 0;
+  padding-inline-start: 18px;
+  font-size: 0.9rem;
+}
+
+.risk-list li { margin: 2px 0; }
+.risk-list li::marker { color: var(--gold-deep); content: "◆  "; font-size: 0.6em; }
+.risk-list.missed li { color: var(--muted); }
+.risk-list.missed li::marker { color: var(--blood-bright); }
+
+.missed-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 18px;
+  color: var(--blood-bright);
+}

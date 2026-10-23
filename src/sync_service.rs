@@ -67,46 +67,6 @@ pub struct SyncReport {
     pub items: ItemReport,
 }
 
-impl SyncReport {
-    /// One-line summary for the UI.
-    pub fn summary(&self) -> String {
-        let mut msg = format!(
-            "Synced {} quests ({} new, {} updated",
-            self.inserted + self.updated,
-            self.inserted,
-            self.updated
-        );
-        if self.removed > 0 {
-            msg.push_str(&format!(", {} removed", self.removed));
-        }
-        msg.push_str(&format!(") in {} languages.", self.languages));
-        match &self.wiki_error {
-            Some(e) => msg.push_str(&format!(" The wiki could not be reached, so its previous data was kept ({e}).")),
-            None => msg.push_str(&format!(
-                " Wiki data for {} quests, plus {} unmarked quests from the wiki that you tick off yourself.",
-                self.wiki_matched, self.wiki_only
-            )),
-        }
-        let items = &self.items;
-        if items.items > 0 {
-            msg.push_str(&format!(
-                " {} items with {} recipes ({} in New Game+), {} with pictures.",
-                items.items, items.base_recipes, items.plus_recipes, items.pictures
-            ));
-        }
-        if let Some(e) = &items.wiki_error {
-            msg.push_str(&format!(" Item pictures could not be fetched ({e})."));
-        }
-        if !self.kept_stale.is_empty() {
-            msg.push_str(&format!(
-                " {} quests are no longer in the game data but were kept because they have your notes or status.",
-                self.kept_stale.len()
-            ));
-        }
-        msg
-    }
-}
-
 /// Reads the quest and item catalogs from `game_dir`, then scrapes the wiki. `known_pictures`
 /// is the stored (wiki file, SHA-1) per item, so unchanged pictures are not downloaded again.
 pub async fn fetch(
@@ -839,7 +799,7 @@ mod tests {
         let offline = Fetched { catalog: catalog(), wiki: Err("offline".into()), items: Default::default(), pictures: Ok(Default::default()) };
         let report = merge(&mut conn, &offline).unwrap();
         assert_eq!(report.wiki_error.as_deref(), Some("offline"));
-        assert!(report.summary().contains("previous data was kept"));
+        assert!(report.wiki_error.is_some());
 
         let last_wish = quests::get(&conn, id_of(&conn, 2), "en").unwrap();
         assert_eq!(last_wish.wiki_page_id, Some(1002));
@@ -866,7 +826,7 @@ mod tests {
         let mut conn = open_in_memory().unwrap();
         let report = merge(&mut conn, &fetched).unwrap();
         println!("sync took {:.1?}", started.elapsed());
-        println!("{}", report.summary());
+        println!("{report:#?}");
         println!("unmatched wiki ({}): {:#?}", report.unmatched_wiki.len(), report.unmatched_wiki);
         println!("unmatched game ({}): {:#?}", report.unmatched_game.len(), report.unmatched_game);
         println!("unresolved ({}): {:?}", report.unresolved.len(), report.unresolved);

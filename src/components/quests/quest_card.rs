@@ -1,8 +1,10 @@
-use dioxus::prelude::*;
 use companion_db::{Quest, QuestProgress, QuestStatus};
+use dioxus::prelude::*;
 
-use super::{region_label, source_label, type_label, wiki_url};
+use crate::components::ornament::{Glyph, Icon};
+use crate::components::{region_label, source_label, status_label, type_label, wiki_url};
 use crate::state::AppState;
+use crate::t;
 
 /// The manual status to store so the quest shows `desired`: none when the save already says so.
 fn manual_for(desired: QuestStatus, save: Option<QuestStatus>) -> Option<QuestStatus> {
@@ -15,20 +17,13 @@ fn manual_for_cleared(status: QuestStatus, save: Option<QuestStatus>) -> Option<
     (save == Some(status)).then_some(QuestStatus::NotStarted)
 }
 
-fn status_label(status: QuestStatus) -> &'static str {
-    match status {
-        QuestStatus::NotStarted => "not started",
-        QuestStatus::InProgress => "in progress",
-        QuestStatus::Completed => "completed",
-        QuestStatus::Failed => "failed",
-    }
-}
-
-/// One quest: completion checkbox, metadata, missable warning, "Mark Failed", wiki link and a
+/// One quest: completion seal, metadata, missable warning, "Mark failed", wiki link and a
 /// drawer with the journal description and notes. With `save_synced` the status comes from the
-/// player's saves alone: there is no checkbox or "Mark Failed", only the status label.
+/// player's saves alone: there is no seal or "Mark failed", only the status.
 #[component]
 pub fn QuestCard(
+    /// Position in the list, for the staggered entrance.
+    index: usize,
     quest: Quest,
     progress: QuestProgress,
     cutoff_name: Option<String>,
@@ -37,6 +32,7 @@ pub fn QuestCard(
     save_synced: bool,
 ) -> Element {
     let mut state = use_context::<AppState>();
+    let tr = *state.tr.read();
     let mut notes_open = use_signal(|| false);
     let mut draft = use_signal(|| progress.notes.clone().unwrap_or_default());
 
@@ -49,83 +45,90 @@ pub fn QuestCard(
     let saved_notes = progress.notes.clone().unwrap_or_default();
     let url = quest.wiki_title.as_deref().map(wiki_url);
 
-    let card_class = match status {
-        QuestStatus::Completed => "card quest-card completed",
-        QuestStatus::Failed => "card quest-card failed",
-        _ if cutoff_active => "card quest-card cutoff-active",
-        _ => "card quest-card",
+    let state_class = match status {
+        QuestStatus::Completed => "is-completed",
+        QuestStatus::Failed => "is-failed",
+        QuestStatus::InProgress if cutoff_active => "is-active is-cutoff",
+        QuestStatus::InProgress => "is-active",
+        _ if cutoff_active => "is-cutoff",
+        _ => "",
     };
 
     rsx! {
-        div { class: card_class,
+        article { class: "quest-card {state_class}", style: "--i: {index.min(16)}",
             div { class: "quest-row",
-                if !save_synced {
-                    input {
-                        class: "checkbox",
-                        r#type: "checkbox",
-                        checked: completed,
+                if save_synced {
+                    span { class: "quest-seal is-readonly", title: t!(tr, "quest.from_save"),
+                        if completed { Glyph { icon: Icon::Check } }
+                        if failed { Glyph { icon: Icon::Close } }
+                    }
+                } else {
+                    button {
+                        class: "quest-seal",
                         disabled: failed,
-                        title: "Mark completed",
-                        onchange: move |e| {
-                            let manual = if e.checked() {
-                                manual_for(QuestStatus::Completed, save_status)
-                            } else {
+                        title: if completed { t!(tr, "quest.unmark_completed") } else { t!(tr, "quest.mark_completed") },
+                        onclick: move |_| {
+                            let manual = if completed {
                                 manual_for_cleared(QuestStatus::Completed, save_status)
+                            } else {
+                                manual_for(QuestStatus::Completed, save_status)
                             };
                             state.set_status(id, manual);
                         },
+                        if completed { Glyph { icon: Icon::Check } }
+                        if failed { Glyph { icon: Icon::Close } }
                     }
                 }
                 div { class: "quest-main",
                     div { class: "quest-name",
-                        "{quest.title}"
-                        if quest.is_unmarked { span { class: "badge badge-muted", "Unmarked" } }
+                        span { "{quest.title}" }
+                        if quest.is_unmarked { span { class: "badge badge-muted", {t!(tr, "quest.unmarked")} } }
                         if !quest.is_trackable() {
-                            span {
-                                class: "badge badge-muted",
-                                title: "Not in the game journal, so saves cannot report it: tick it off yourself",
-                                "Manual"
-                            }
+                            span { class: "badge badge-muted", title: t!(tr, "quest.manual_hint"), {t!(tr, "quest.manual")} }
                         }
                     }
                     div { class: "quest-meta",
-                        span { "{region_label(quest.region)}" }
+                        span { {region_label(tr, quest.region)} }
                         if let Some(level) = quest.recommended_level {
-                            span { "Lvl {level}" }
+                            span { class: "num", {t!(tr, "quest.level", n = level)} }
                         }
-                        span { "{type_label(quest.quest_type)}" }
-                        span { class: "badge badge-source", "{source_label(quest.source)}" }
+                        span { {type_label(tr, quest.quest_type)} }
+                        span { class: "badge badge-source", {source_label(tr, quest.source)} }
                     }
                     if !completed && !failed {
                         if let Some(cutoff) = &cutoff_name {
-                            div { class: "quest-warning", "⚠ Cutoff: {cutoff}" }
+                            div { class: "quest-warning",
+                                Glyph { icon: Icon::Warning }
+                                span { {t!(tr, "quest.cutoff", name = cutoff)} }
+                            }
                         }
                         if let Some(notes) = &quest.important_notes {
-                            div { class: "quest-important", "❗ {notes}" }
+                            div { class: "quest-important",
+                                Glyph { icon: Icon::Pin }
+                                span { "{notes}" }
+                            }
                         }
                     }
                     if progress.overrides_save() {
                         div { class: "quest-override",
-                            "Set by you · your save says {status_label(save_status.unwrap_or(QuestStatus::NotStarted))} "
-                            button {
-                                class: "btn btn-link",
-                                title: "Show the status from your save again",
-                                onclick: move |_| state.set_status(id, None),
-                                "Follow save"
+                            {t!(tr, "quest.override", status = status_label(tr, save_status.unwrap_or(QuestStatus::NotStarted)))}
+                            " "
+                            button { class: "btn-link", title: t!(tr, "quest.follow_save_hint"), onclick: move |_| state.set_status(id, None),
+                                {t!(tr, "quest.follow_save")}
                             }
                         }
                     }
                 }
                 div { class: "quest-actions",
                     match status {
-                        QuestStatus::Completed => rsx! { span { class: "badge badge-done", "Completed" } },
-                        QuestStatus::Failed => rsx! { span { class: "badge badge-failed", "Failed" } },
-                        QuestStatus::InProgress => rsx! { span { class: "badge badge-active", "In progress" } },
+                        QuestStatus::Completed => rsx! { span { class: "badge badge-done", {status_label(tr, status)} } },
+                        QuestStatus::Failed => rsx! { span { class: "badge badge-failed", {status_label(tr, status)} } },
+                        QuestStatus::InProgress => rsx! { span { class: "badge badge-active", {status_label(tr, status)} } },
                         _ => rsx! {},
                     }
                     if !completed && !save_synced {
                         button {
-                            class: "btn btn-fail",
+                            class: "btn btn-ghost danger small",
                             onclick: move |_| {
                                 let manual = if failed {
                                     manual_for_cleared(QuestStatus::Failed, save_status)
@@ -134,26 +137,26 @@ pub fn QuestCard(
                                 };
                                 state.set_status(id, manual);
                             },
-                            if failed { "Clear Failed" } else { "Mark Failed" }
+                            if failed { {t!(tr, "quest.clear_failed")} } else { {t!(tr, "quest.mark_failed")} }
                         }
                     }
                     if let Some(url) = url {
                         button {
-                            class: "btn btn-icon",
-                            title: "Open on the Witcher wiki",
+                            class: "btn-icon",
+                            title: t!(tr, "quest.open_wiki"),
                             onclick: move |_| {
                                 if let Err(e) = open::that(&url) {
-                                    state.error.set(Some(format!("Could not open the browser: {e}")));
+                                    state.error.set(Some(t!(tr, "common.browser_failed", error = e)));
                                 }
                             },
-                            "Wiki ↗"
+                            Glyph { icon: Icon::External }
                         }
                     }
                     button {
-                        class: if has_notes { "btn btn-note has-notes" } else { "btn btn-note" },
-                        title: "Details and notes",
+                        class: if has_notes { "btn-icon has-notes" } else { "btn-icon" },
+                        title: t!(tr, "quest.notes"),
                         onclick: move |_| notes_open.toggle(),
-                        "📝"
+                        Glyph { icon: Icon::Quill }
                     }
                 }
             }
@@ -165,7 +168,7 @@ pub fn QuestCard(
                     textarea {
                         class: "input notes",
                         rows: 3,
-                        placeholder: "Your notes for this quest…",
+                        placeholder: t!(tr, "quest.notes_placeholder"),
                         value: "{draft}",
                         oninput: move |e| draft.set(e.value()),
                         onblur: move |_| {

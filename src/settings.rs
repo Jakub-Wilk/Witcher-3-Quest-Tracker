@@ -1,11 +1,12 @@
 //! App settings, persisted to `settings.toml` next to the DB: folder locations, UI language,
-//! the last selected playthrough, quest list filters and save tracking.
+//! the last selected playthrough and tab, quest list and workbench filters, and save tracking.
 
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 use crate::view_options::ViewOptions;
+use crate::workbench::WorkbenchOptions;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -13,7 +14,16 @@ pub struct AppSettings {
     pub paths: Paths,
     pub ui: Ui,
     pub view: ViewOptions,
+    pub workbench: WorkbenchOptions,
     pub tracking: Tracking,
+}
+
+/// The app's two features.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Tab {
+    #[default]
+    Quests,
+    Workbench,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -28,14 +38,15 @@ pub struct Paths {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Ui {
-    /// Game language code of quest titles and descriptions (`en`, `pl`, ...).
+    /// Game language code of the interface and the game's text (`en`, `pl`, ...).
     pub language: String,
     pub last_playthrough_id: Option<i64>,
+    pub tab: Tab,
 }
 
 impl Default for Ui {
     fn default() -> Self {
-        Self { language: "en".into(), last_playthrough_id: None }
+        Self { language: "en".into(), last_playthrough_id: None, tab: Tab::default() }
     }
 }
 
@@ -53,15 +64,20 @@ impl Default for Tracking {
 }
 
 impl AppSettings {
-    /// Loads settings from `path`. A missing file gives defaults; an unreadable or invalid one
-    /// is logged and also gives defaults, so a bad settings file never blocks startup.
+    /// Loads settings from `path`. A missing file (the first launch) gives defaults in the
+    /// operating system's language; an unreadable or invalid one is logged and gives defaults,
+    /// so a bad settings file never blocks startup.
     pub fn load(path: &Path) -> Self {
         match std::fs::read_to_string(path) {
             Ok(text) => toml::from_str(&text).unwrap_or_else(|e| {
                 tracing::warn!("Ignoring invalid {}: {e}", path.display());
                 Self::default()
             }),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Self::default(),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                let mut settings = Self::default();
+                settings.ui.language = crate::i18n::detect_language().to_string();
+                settings
+            }
             Err(e) => {
                 tracing::warn!("Could not read {}: {e}", path.display());
                 Self::default()
@@ -141,31 +157,6 @@ fn steam_libraries(vdf: &str) -> Vec<PathBuf> {
         .collect()
 }
 
-/// Native name of a game language code, for pickers.
-pub fn language_label(code: &str) -> &str {
-    match code {
-        "ar" => "العربية",
-        "br" => "Português (Brasil)",
-        "cn" => "简体中文",
-        "cz" => "Čeština",
-        "de" => "Deutsch",
-        "en" => "English",
-        "es" => "Español",
-        "esmx" => "Español (México)",
-        "fr" => "Français",
-        "hu" => "Magyar",
-        "it" => "Italiano",
-        "jp" => "日本語",
-        "kr" => "한국어",
-        "pl" => "Polski",
-        "ru" => "Русский",
-        "tr" => "Türkçe",
-        "ua" => "Українська",
-        "zh" => "繁體中文",
-        other => other,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,8 +187,11 @@ mod tests {
     fn missing_or_invalid_file_gives_defaults() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("settings.toml");
-        assert_eq!(AppSettings::load(&path), AppSettings::default());
-        assert_eq!(AppSettings::load(&path).ui.language, "en");
+        // A first launch picks the system language.
+        let mut fresh = AppSettings::load(&path);
+        assert_eq!(fresh.ui.language, crate::i18n::detect_language());
+        fresh.ui.language = "en".into();
+        assert_eq!(fresh, AppSettings::default());
         assert!(AppSettings::load(&path).tracking.watch_saves);
 
         std::fs::write(&path, "[view]\nsort = \"Sideways\"").unwrap();

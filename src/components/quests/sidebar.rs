@@ -1,18 +1,11 @@
-use dioxus::prelude::*;
 use companion_db::QuestStatus;
+use dioxus::prelude::*;
 
-use super::{QUEST_TYPES, SOURCES, region_label, source_label, type_label};
+use crate::components::ornament::Divider;
+use crate::components::{QUEST_TYPES, SOURCES, region_label, source_label, status_label, type_label};
 use crate::state::AppState;
+use crate::t;
 use crate::view_options::{REGIONS, STATUSES, SortKey, ViewOptions, toggle};
-
-fn status_filter_label(status: QuestStatus) -> &'static str {
-    match status {
-        QuestStatus::NotStarted => "Not started",
-        QuestStatus::InProgress => "In progress",
-        QuestStatus::Completed => "Completed",
-        QuestStatus::Failed => "Failed",
-    }
-}
 
 /// Left panel: expansion, category, status and region filters, sort order, and progress.
 /// Each filter is a multi-select where "All" clears the selection. All choices are persisted
@@ -20,6 +13,7 @@ fn status_filter_label(status: QuestStatus) -> &'static str {
 #[component]
 pub fn Sidebar() -> Element {
     let mut state = use_context::<AppState>();
+    let tr = *state.tr.read();
     let view = state.view.read().clone();
     let summary = state.summary.read().clone();
 
@@ -59,79 +53,95 @@ pub fn Sidebar() -> Element {
     let is_default = ViewOptions { search: view.search.clone(), ..Default::default() } == view;
 
     rsx! {
-        aside { class: "pane sidebar",
+        aside { class: "panel sidebar",
+            section { class: "progress-section",
+                h3 { class: "section-title", {t!(tr, "quests.progress")} }
+                div { class: "progress-ring",
+                    div { class: "progress-figure", "{pct:.0}" span { "%" } }
+                    div { class: "progress-bar",
+                        div { class: "progress-fill", style: "transform: scaleX({pct / 100.0:.4})" }
+                    }
+                    div { class: "progress-stats",
+                        {t!(tr, "quests.completed_of", done = summary.completed, total = summary.total_quests)}
+                    }
+                    if summary.failed > 0 {
+                        div { class: "progress-failed", {t!(tr, "quests.failed_count", n = summary.failed)} }
+                    }
+                }
+            }
+            Divider {}
             section {
-                h3 { class: "section-title", "Expansion" }
-                div { class: "chips",
+                h3 { class: "section-title", {t!(tr, "quests.expansion")} }
+                div { class: "chips chips-wrap",
                     button {
-                        class: if view.sources.is_empty() { "chip active" } else { "chip" },
+                        class: if view.sources.is_empty() { "chip is-active" } else { "chip" },
                         onclick: move |_| state.view.write().sources.clear(),
-                        "All"
+                        {t!(tr, "common.all")}
                     }
                     for s in SOURCES {
                         button {
-                            class: if view.sources.contains(&s) { "chip active" } else { "chip" },
+                            class: if view.sources.contains(&s) { "chip is-active" } else { "chip" },
                             onclick: move |_| toggle(&mut state.view.write().sources, s),
-                            "{source_label(s)}"
+                            {source_label(tr, s)}
                         }
                     }
                 }
             }
             section {
-                h3 { class: "section-title", "Category" }
+                h3 { class: "section-title", {t!(tr, "quests.category")} }
                 ul { class: "categories",
                     li {
-                        class: if view.quest_types.is_empty() { "category active" } else { "category" },
+                        class: if view.quest_types.is_empty() { "category is-active" } else { "category" },
                         onclick: move |_| state.view.write().quest_types.clear(),
-                        span { "All quests" }
+                        span { {t!(tr, "quests.all_quests")} }
                     }
                     for (t, done, total) in counts {
                         li {
-                            class: if view.quest_types.contains(&t) { "category active" } else { "category" },
+                            class: if view.quest_types.contains(&t) { "category is-active" } else { "category" },
                             onclick: move |_| toggle(&mut state.view.write().quest_types, t),
-                            span { "{type_label(t)}" }
+                            span { {type_label(tr, t)} }
                             span { class: "count", "{done}/{total}" }
                         }
                     }
                 }
             }
             section {
-                h3 { class: "section-title", "Status" }
-                div { class: "chips",
+                h3 { class: "section-title", {t!(tr, "quests.status")} }
+                div { class: "chips chips-wrap",
                     button {
-                        class: if view.statuses.is_empty() { "chip active" } else { "chip" },
+                        class: if view.statuses.is_empty() { "chip is-active" } else { "chip" },
                         onclick: move |_| state.view.write().statuses.clear(),
-                        "All"
+                        {t!(tr, "common.all")}
                     }
                     for s in STATUSES {
                         button {
-                            class: if view.statuses.contains(&s) { "chip active" } else { "chip" },
+                            class: if view.statuses.contains(&s) { "chip is-active" } else { "chip" },
                             onclick: move |_| toggle(&mut state.view.write().statuses, s),
-                            "{status_filter_label(s)}"
+                            {status_label(tr, s)}
                         }
                     }
                 }
             }
             section {
-                h3 { class: "section-title", "Region" }
-                div { class: "chips",
+                h3 { class: "section-title", {t!(tr, "quests.region")} }
+                div { class: "chips chips-wrap",
                     button {
-                        class: if view.regions.is_empty() { "chip active" } else { "chip" },
+                        class: if view.regions.is_empty() { "chip is-active" } else { "chip" },
                         onclick: move |_| state.view.write().regions.clear(),
-                        "All"
+                        {t!(tr, "common.all")}
                     }
                     for r in regions {
                         button {
-                            class: if view.regions.contains(&r) { "chip active" } else { "chip" },
+                            class: if view.regions.contains(&r) { "chip is-active" } else { "chip" },
                             onclick: move |_| toggle(&mut state.view.write().regions, r),
-                            "{region_label(r)}"
+                            {region_label(tr, r)}
                         }
                     }
                 }
             }
             section {
                 label { class: "field",
-                    span { class: "section-title", "Sort by" }
+                    span { class: "section-title", {t!(tr, "quests.sort_by")} }
                     select {
                         class: "select",
                         onchange: move |e| {
@@ -140,7 +150,7 @@ pub fn Sidebar() -> Element {
                             }
                         },
                         for (i, key) in SortKey::ALL.into_iter().enumerate() {
-                            option { value: "{i}", selected: view.sort == key, "{key.label()}" }
+                            option { value: "{i}", selected: view.sort == key, {sort_label(tr, key)} }
                         }
                     }
                 }
@@ -151,23 +161,20 @@ pub fn Sidebar() -> Element {
                             let search = state.view.peek().search.clone();
                             state.view.set(ViewOptions { search, ..Default::default() });
                         },
-                        "Reset filters"
+                        {t!(tr, "quests.reset_filters")}
                     }
                 }
             }
-            section { class: "progress-section",
-                h3 { class: "section-title", "Progress" }
-                div { class: "progress-bar",
-                    div { class: "progress-fill", style: "width: {pct:.1}%" }
-                }
-                div { class: "progress-stats",
-                    span { "{summary.completed}/{summary.total_quests} completed" }
-                    span { class: "gold", "{pct:.1}%" }
-                }
-                if summary.failed > 0 {
-                    div { class: "progress-failed", "{summary.failed} failed" }
-                }
-            }
         }
+    }
+}
+
+fn sort_label(tr: crate::i18n::Tr, key: SortKey) -> &'static str {
+    match key {
+        SortKey::Story => t!(tr, "sort.story"),
+        SortKey::Level => t!(tr, "sort.level"),
+        SortKey::Name => t!(tr, "sort.name"),
+        SortKey::Region => t!(tr, "sort.region"),
+        SortKey::Cutoff => t!(tr, "sort.cutoff"),
     }
 }

@@ -40,16 +40,6 @@ pub enum SortKey {
 
 impl SortKey {
     pub const ALL: [SortKey; 5] = [SortKey::Story, SortKey::Level, SortKey::Name, SortKey::Region, SortKey::Cutoff];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            SortKey::Story => "Story order",
-            SortKey::Level => "Level",
-            SortKey::Name => "Name",
-            SortKey::Region => "Region",
-            SortKey::Cutoff => "Cutoff",
-        }
-    }
 }
 
 /// Filters and sort order for the quest list. Everything but the search text is persisted.

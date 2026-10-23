@@ -23,6 +23,8 @@ tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 w3_formats = { version = "0.1.0", path = "crates/w3_formats" }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
+unicode-normalization = "0.1"
+sys-locale = "0.3.2"
 
 [dev-dependencies]
 witcher_wiki = { path = "crates/witcher_wiki", features = ["mock"] }
