@@ -193,17 +193,25 @@ fn refresh_completed_at(conn: &Connection, playthrough_id: i64, quest_id: Option
     Ok(())
 }
 
-/// Aggregate completion counts for a playthrough, by effective status.
+/// Aggregate completion counts for a playthrough, by effective status. Open quests locked out by
+/// a finished cutoff quest count as failed.
 pub fn completion_summary(conn: &Connection, playthrough_id: i64) -> Result<CompletionSummary> {
     let sql = format!(
         "SELECT
-            COUNT(q.id),
-            COALESCE(SUM({EFFECTIVE} = 'NotStarted'), 0),
-            COALESCE(SUM({EFFECTIVE} = 'InProgress'), 0),
-            COALESCE(SUM({EFFECTIVE} = 'Completed'), 0),
-            COALESCE(SUM({EFFECTIVE} = 'Failed'), 0)
-         FROM quests q
-         LEFT JOIN quest_progress qp ON q.id = qp.quest_id AND qp.playthrough_id = ?1"
+            COUNT(*),
+            COALESCE(SUM(s = 'NotStarted'), 0),
+            COALESCE(SUM(s = 'InProgress'), 0),
+            COALESCE(SUM(s = 'Completed'), 0),
+            COALESCE(SUM(s = 'Failed'), 0)
+         FROM (
+            SELECT CASE
+                WHEN {EFFECTIVE} IN ('NotStarted', 'InProgress')
+                    AND COALESCE(cp.manual_status, cp.save_status) IN ('Completed', 'Failed')
+                THEN 'Failed' ELSE {EFFECTIVE} END AS s
+            FROM quests q
+            LEFT JOIN quest_progress qp ON q.id = qp.quest_id AND qp.playthrough_id = ?1
+            LEFT JOIN quest_progress cp ON q.cutoff_quest_id = cp.quest_id AND cp.playthrough_id = ?1
+         )"
     );
     conn.query_row(&sql, params![playthrough_id], |row| {
         Ok(CompletionSummary {
@@ -306,6 +314,32 @@ mod tests {
 
         clear_save_statuses(&conn, pt).unwrap();
         assert_eq!(get(&conn, pt, a).unwrap().unwrap().status(), QuestStatus::NotStarted);
+    }
+
+    #[test]
+    fn locked_out_quests_count_as_failed() {
+        let conn = open_in_memory().unwrap();
+        let pt = playthrough(&conn);
+        let (a, _) = quests::upsert(&conn, &quests::tests::sample("A", 1)).unwrap();
+        let (b, _) = quests::upsert(&conn, &quests::tests::sample("B", 2)).unwrap();
+        let (c, _) = quests::upsert(&conn, &quests::tests::sample("C", 3)).unwrap();
+        let (cutoff, _) = quests::upsert(&conn, &quests::tests::sample("Cutoff", 4)).unwrap();
+        for q in [a, b, c] {
+            quests::set_cutoff(&conn, q, Some(cutoff)).unwrap();
+        }
+        apply_save_statuses(&conn, pt, &HashMap::from([(a, QuestStatus::InProgress), (c, QuestStatus::Completed)]))
+            .unwrap();
+
+        // Cutoff still open: nothing is locked out yet.
+        let summary = completion_summary(&conn, pt).unwrap();
+        assert_eq!((summary.not_started, summary.in_progress, summary.failed), (2, 1, 0));
+
+        set_manual_status(&conn, pt, cutoff, Some(QuestStatus::Completed)).unwrap();
+        let summary = completion_summary(&conn, pt).unwrap();
+        assert_eq!(
+            summary,
+            CompletionSummary { total_quests: 4, not_started: 0, in_progress: 0, completed: 2, failed: 2 }
+        );
     }
 
     #[test]
