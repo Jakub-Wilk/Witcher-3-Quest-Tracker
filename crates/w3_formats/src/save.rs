@@ -1,4 +1,4 @@
-//! Witcher 3 `.sav` reader: playthrough lineage and journal (quest) statuses.
+//! Witcher 3 `.sav` reader: playthrough lineage, journal (quest) statuses and Geralt's inventory.
 //!
 //! Layout, outermost first:
 //! - `SNFH` `FZLC` chunked LZ4 container: chunk count, header size, then per chunk
@@ -98,6 +98,9 @@ pub struct SaveSnapshot {
     /// tutorials, bestiary and so on; phases and objectives (which live inside a quest's file)
     /// are not included.
     pub journal: HashMap<String, JournalStatus>,
+    /// Geralt's inventory: internal item name (e.g. `Swallow 2`) → quantity. `None` when it could
+    /// not be read (see [`crate::inventory`]); that never fails the whole save.
+    pub inventory: Option<HashMap<String, u32>>,
 }
 
 impl SaveSnapshot {
@@ -259,6 +262,7 @@ impl<'a> RawSave<'a> {
             playthrough_id: None,
             history: Vec::new(),
             journal: HashMap::new(),
+            inventory: crate::inventory::read_player_inventory(self.raw, &self.names),
         };
         let mut save_info_end = None;
         let mut journal_end = None;

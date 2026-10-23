@@ -3,7 +3,8 @@
 
 use std::path::PathBuf;
 
-use w3_formats::{Content, JournalQuestType, read_game_catalog};
+use w3_formats::items::{Mode, RecipeKind};
+use w3_formats::{Content, JournalQuestType, read_game_catalog, read_item_catalog};
 
 fn game_dir() -> Option<PathBuf> {
     std::env::var_os("W3_GAME_DIR").map(PathBuf::from)
@@ -42,4 +43,21 @@ fn reads_the_quest_catalog() {
     let hos = catalog.quests.iter().filter(|q| q.content == Content::HeartsOfStone).count();
     assert!(bob > 50 && hos > 15, "bob {bob}, hos {hos}");
     assert!(catalog.quests.iter().all(|q| !q.group.is_empty()), "every quest has a group");
+}
+
+#[test]
+#[ignore = "needs W3_GAME_DIR"]
+fn reads_the_item_catalog() {
+    let Some(dir) = game_dir() else { return };
+    let catalog = read_item_catalog(&dir).unwrap();
+    // The counts the Recipe Planner extracted from the same Remastered install.
+    assert_eq!((catalog.base.items.len(), catalog.base.recipes.len()), (827, 629));
+    assert_eq!((catalog.plus.items.len(), catalog.plus.recipes.len()), (838, 641));
+
+    let swallow = &catalog.set(Mode::Base).recipes["swallow-2"];
+    assert_eq!(swallow.kind, RecipeKind::Alchemy);
+    let en = &catalog.texts["en"];
+    assert_eq!(en[&catalog.base.items["swallow-2"].name_key], "Enhanced Swallow");
+    assert!(catalog.texts["pl"].contains_key(&catalog.base.items["swallow-2"].name_key));
+    assert!(en.contains_key("panel_title_alchemy"));
 }

@@ -94,3 +94,22 @@ fn truncated_copy_of_real_save_is_an_error() {
     let half = &bytes[..bytes.len() / 2];
     assert!(w3_formats::save::parse_save(half).is_err());
 }
+
+#[test]
+fn remastered_inventory() {
+    let Some(save) = fixture(REMASTERED_MANUAL) else { return };
+    let inventory = save.inventory.as_ref().expect("player inventory");
+    assert!(inventory.len() > 50, "only {} distinct items", inventory.len());
+    // Every Witcher carries his swords' worth of crafting junk; the names are internal ones.
+    assert!(inventory.keys().all(|name| !name.is_empty()));
+    assert!(inventory.values().all(|&qty| qty > 0));
+    for name in [REMASTERED_CHECKPOINT, REMASTERED_QUICK] {
+        if let Some(save) = fixture(name) {
+            assert!(save.inventory.is_some(), "{name}");
+        }
+    }
+    // The inventory layout is only known for Remastered; older saves still parse, without it.
+    if let Some(save) = fixture(NEXTGEN_MANUAL) {
+        assert!(save.inventory.is_none());
+    }
+}

@@ -5,10 +5,13 @@ pub mod bundle;
 pub mod catalog;
 pub mod cr2w;
 mod error;
+pub mod inventory;
+pub mod items;
 mod reader;
 pub mod save;
 pub mod strings;
 
 pub use catalog::{Content, GameCatalog, GameQuest, JournalQuestType, read_game_catalog};
 pub use error::{Error, Result};
+pub use items::{ItemCatalog, read_item_catalog};
 pub use save::{HistoryRecord, JournalStatus, SaveSnapshot, SaveTime, read_save};

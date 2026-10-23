@@ -318,6 +318,7 @@ mod tests {
                 playthrough_id: Some("6abfb2520000423b".into()),
                 history,
                 journal: journal.iter().map(|(p, s)| (p.to_string(), *s)).collect::<HashMap<_, _>>(),
+                inventory: None,
             },
         }
     }

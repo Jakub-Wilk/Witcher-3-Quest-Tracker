@@ -4,7 +4,8 @@
 //! key2` selects a per-language magic (0 for languages added later, whose text is not
 //! encrypted). From byte 10:
 //! - block 1: count, then (id ^ magic, offset, length) per string, `u32` each;
-//! - block 2: count, then 8-byte key-hash entries (unused here);
+//! - block 2: count, then (key hash, id ^ magic) per string key, `u32` each. The hash is the
+//!   Java-style `h = h * 31 + c` over the lowercase key (e.g. `item_name_swallow_2`);
 //! - block 3: the size of the string data that follows.
 //!
 //! Counts are "bit6" variable-length integers. Each string is XOR-encrypted unit by unit with the
@@ -74,60 +75,103 @@ pub fn load(files: &[PathBuf], wanted: &HashSet<u32>) -> Result<HashMap<u32, Str
 
 /// Decodes the strings whose id passes `keep` into `out`.
 pub fn parse(bytes: &[u8], keep: impl Fn(u32) -> bool, out: &mut HashMap<u32, String>) -> Result<()> {
-    if bytes.get(..4) != Some(b"RTSW") || bytes.len() < 12 {
-        return Err(Error::format("not a w3strings file"));
-    }
-    let mut r = Reader::at(bytes, 4);
-    let version = r.u32()?;
-    let key1 = r.u16()? as u32;
-    let key2 = u16::from_le_bytes([bytes[bytes.len() - 2], bytes[bytes.len() - 1]]) as u32;
-    let key = key1 << 16 | key2;
-    let magic = match MAGICS.iter().find(|(k, _)| *k == key) {
-        Some(&(_, magic)) => magic,
-        None if key == 0 => 0,
-        None => return Err(Error::format(format!("unknown language key {key:#010x}"))),
-    };
-
-    let mut r = Reader::at(bytes, 10);
-    let count = bit6(&mut r)? as usize;
-    let mut entries = Vec::with_capacity(count.min(1 << 20));
-    for _ in 0..count {
-        let id = r.u32()? ^ magic;
-        let offset = r.u32()? as usize;
-        let len = r.u32()? as usize;
+    let file = Parsed::new(bytes)?;
+    for &(id, offset, len) in &file.entries {
         if keep(id) {
-            entries.push((id, offset, len));
+            out.insert(id, file.decode(offset, len)?);
         }
     }
-    let hashes = bit6(&mut r)? as usize;
-    r.bytes(hashes.checked_mul(8).ok_or(Error::Truncated)?)?;
-    let _data_size = bit6(&mut r)?;
-    let data = &bytes[r.pos()..];
+    Ok(())
+}
 
-    let utf8 = version >= UTF8_VERSION;
-    let unit = if utf8 { 1 } else { 2 };
-    let start_key = ((magic >> 8) & 0xffff) as u16;
-    for (id, offset, len) in entries {
-        let raw = data.get(offset * unit..(offset + len) * unit).ok_or(Error::Truncated)?;
-        let mut k = start_key;
+/// The key hash the game uses to look strings up by name.
+pub fn key_hash(key: &str) -> u32 {
+    key.bytes().fold(0u32, |h, c| h.wrapping_mul(31).wrapping_add(c.to_ascii_lowercase() as u32))
+}
+
+/// Loads the strings with the `wanted` keys (lowercase localisation keys such as
+/// `item_name_swallow_2`) from one language's files.
+pub fn load_keys(files: &[PathBuf], wanted: &HashSet<String>) -> Result<HashMap<String, String>> {
+    let by_hash: HashMap<u32, &String> = wanted.iter().map(|k| (key_hash(k), k)).collect();
+    let mut out = HashMap::new();
+    for path in files {
+        let bytes = std::fs::read(path).map_err(|e| Error::io(path, e))?;
+        let file = Parsed::new(&bytes).map_err(|e| Error::format(format!("{}: {e}", path.display())))?;
+        let ids: HashMap<u32, &String> =
+            file.keys.iter().filter_map(|(hash, id)| Some((*id, *by_hash.get(hash)?))).collect();
+        for &(id, offset, len) in &file.entries {
+            if let Some(key) = ids.get(&id) {
+                out.insert((*key).clone(), file.decode(offset, len)?);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// A w3strings file with its tables read and its string data not yet decrypted.
+struct Parsed<'a> {
+    utf8: bool,
+    magic: u32,
+    /// (id, offset, length) per string.
+    entries: Vec<(u32, usize, usize)>,
+    /// (key hash, id) per named string.
+    keys: Vec<(u32, u32)>,
+    data: &'a [u8],
+}
+
+impl<'a> Parsed<'a> {
+    fn new(bytes: &'a [u8]) -> Result<Self> {
+        if bytes.get(..4) != Some(b"RTSW") || bytes.len() < 12 {
+            return Err(Error::format("not a w3strings file"));
+        }
+        let mut r = Reader::at(bytes, 4);
+        let version = r.u32()?;
+        let key1 = r.u16()? as u32;
+        let key2 = u16::from_le_bytes([bytes[bytes.len() - 2], bytes[bytes.len() - 1]]) as u32;
+        let key = key1 << 16 | key2;
+        let magic = match MAGICS.iter().find(|(k, _)| *k == key) {
+            Some(&(_, magic)) => magic,
+            None if key == 0 => 0,
+            None => return Err(Error::format(format!("unknown language key {key:#010x}"))),
+        };
+
+        let mut r = Reader::at(bytes, 10);
+        let count = bit6(&mut r)? as usize;
+        let mut entries = Vec::with_capacity(count.min(1 << 20));
+        for _ in 0..count {
+            let id = r.u32()? ^ magic;
+            let offset = r.u32()? as usize;
+            let len = r.u32()? as usize;
+            entries.push((id, offset, len));
+        }
+        let count = bit6(&mut r)? as usize;
+        let mut keys = Vec::with_capacity(count.min(1 << 20));
+        for _ in 0..count {
+            let hash = r.u32()?;
+            keys.push((hash, r.u32()? ^ magic));
+        }
+        let _data_size = bit6(&mut r)?;
+        Ok(Self { utf8: version >= UTF8_VERSION, magic, entries, keys, data: &bytes[r.pos()..] })
+    }
+
+    fn decode(&self, offset: usize, len: usize) -> Result<String> {
+        let unit = if self.utf8 { 1 } else { 2 };
+        let raw = self.data.get(offset * unit..(offset + len) * unit).ok_or(Error::Truncated)?;
+        let mut k = ((self.magic >> 8) & 0xffff) as u16;
         let mut next_key = || {
             let key = ((len as u32 + 1).wrapping_mul(k as u32) & 0xffff) as u16;
             k = k.rotate_left(1);
             key
         };
-        let text = if utf8 {
+        Ok(if self.utf8 {
             let plain: Vec<u8> = raw.iter().map(|&b| b ^ next_key() as u8).collect();
             String::from_utf8_lossy(&plain).into_owned()
         } else {
-            let units: Vec<u16> = raw
-                .chunks_exact(2)
-                .map(|c| u16::from_le_bytes([c[0], c[1]]) ^ next_key())
-                .collect();
+            let units: Vec<u16> =
+                raw.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]]) ^ next_key()).collect();
             String::from_utf16_lossy(&units)
-        };
-        out.insert(id, text);
+        })
     }
-    Ok(())
 }
 
 /// The "bit6" variable-length integer, decoded exactly like the reference w3strings tool: the
@@ -167,6 +211,10 @@ mod tests {
 
     /// Builds a w3strings file with one string, encrypting it the way the game does.
     fn build(version: u32, key: u32, magic: u32, id: u32, text: &str) -> Vec<u8> {
+        build_keyed(version, key, magic, id, text, None)
+    }
+
+    fn build_keyed(version: u32, key: u32, magic: u32, id: u32, text: &str, name: Option<&str>) -> Vec<u8> {
         let units: Vec<u16> = if version >= UTF8_VERSION {
             text.bytes().map(u16::from).collect()
         } else {
@@ -191,7 +239,14 @@ mod tests {
         out.extend_from_slice(&(id ^ magic).to_le_bytes());
         out.extend_from_slice(&0u32.to_le_bytes());
         out.extend_from_slice(&(len as u32).to_le_bytes());
-        out.push(0); // block 2 count
+        match name {
+            Some(name) => {
+                out.push(1); // block 2 count
+                out.extend_from_slice(&key_hash(name).to_le_bytes());
+                out.extend_from_slice(&(id ^ magic).to_le_bytes());
+            }
+            None => out.push(0),
+        }
         out.push(data.len() as u8); // block 3 size (fits one byte in these tests)
         out.extend_from_slice(&data);
         out.extend_from_slice(&(key as u16).to_le_bytes());
@@ -226,6 +281,27 @@ mod tests {
     fn unknown_key_is_an_error() {
         let file = build(164, 0x1234_5678, 0, 1, "x");
         assert!(parse(&file, |_| true, &mut HashMap::new()).is_err());
+    }
+
+    #[test]
+    fn key_hash_matches_java_string_hash() {
+        assert_eq!(key_hash("a"), 97);
+        assert_eq!(key_hash("ab"), 97 * 31 + 98);
+        // Wraps like a Java int, and is case-insensitive.
+        assert_eq!(key_hash("item_name_swallow_2"), key_hash("Item_Name_Swallow_2"));
+        assert_eq!(key_hash("item_name_swallow_2"), "item_name_swallow_2".bytes().fold(0u32, |h, c| h.wrapping_mul(31).wrapping_add(c as u32)));
+    }
+
+    #[test]
+    fn lookup_by_key() {
+        let file = build_keyed(164, 0x4397_5139, 0x7932_1793, 1153, "Swallow", Some("item_name_swallow_2"));
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("en.w3strings");
+        std::fs::write(&path, file).unwrap();
+        let wanted = HashSet::from(["item_name_swallow_2".to_string(), "missing".to_string()]);
+        let found = load_keys(&[path], &wanted).unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found["item_name_swallow_2"], "Swallow");
     }
 
     #[test]
