@@ -265,14 +265,22 @@ a { color: var(--gold); }
   filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.7));
 }
 
+.medallion { transform-origin: 50% 8%; }
 .medallion .medallion-sign { animation: sign-glow 4s ease-in-out infinite; }
 .medallion.is-idle { animation: medallion-hum 7s ease-in-out infinite; }
-.medallion.is-spinning { animation: medallion-spin 2.4s var(--ease-in-out) infinite; }
-.medallion.is-spinning .medallion-sign { animation-duration: 0.9s; }
+/* Near magic the medallion trembles and its eyes burn. */
+.medallion.is-spinning { animation: medallion-quiver 0.32s linear infinite; }
+.medallion.is-spinning .medallion-sign { animation-duration: 0.7s; }
 
 @keyframes sign-glow {
-  0%, 100% { filter: drop-shadow(0 0 0 transparent); opacity: 0.85; }
-  50% { filter: drop-shadow(0 0 4px rgba(236, 208, 143, 0.9)); opacity: 1; }
+  0%, 100% { filter: drop-shadow(0 0 0 transparent); opacity: 0.8; }
+  50% { filter: drop-shadow(0 0 3px rgba(255, 170, 90, 0.95)); opacity: 1; }
+}
+
+@keyframes medallion-quiver {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-2.5deg) translateX(-0.5px); }
+  75% { transform: rotate(2.5deg) translateX(0.5px); }
 }
 
 /* The medallion hums now and then, as it does near magic. */
