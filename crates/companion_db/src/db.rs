@@ -37,6 +37,7 @@ fn migrations() -> Migrations<'static> {
         M::up(include_str!("../migrations/001_create_tables.sql")),
         M::up(include_str!("../migrations/002_quest_journals.sql")),
         M::up(include_str!("../migrations/003_drop_difficulty.sql")),
+        M::up(include_str!("../migrations/004_items_recipes.sql")),
     ])
 }
 

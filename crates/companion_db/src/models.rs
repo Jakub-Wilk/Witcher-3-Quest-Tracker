@@ -129,6 +129,8 @@ pub struct Playthrough {
     pub notes: Option<String>,
     pub link: Option<SaveLink>,
     pub head: Option<HeadSave>,
+    /// Packed time of the save the inventory was read from.
+    pub inventory_save_key: Option<i64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -248,4 +250,135 @@ pub struct CompletionSummary {
     pub in_progress: i64,
     pub completed: i64,
     pub failed: i64,
+}
+
+/// The expansion an item or recipe ships with; `None` means the base game.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Expansion {
+    HeartsOfStone,
+    BloodAndWine,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum RecipeKind {
+    Crafting,
+    Alchemy,
+    Enchanting,
+}
+
+/// Which recipe set applies: New Game+ replaces some definitions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RecipeMode {
+    Base,
+    Plus,
+}
+
+impl_sql_enum!(Expansion {
+    HeartsOfStone => "HeartsOfStone",
+    BloodAndWine => "BloodAndWine",
+});
+
+impl_sql_enum!(RecipeKind {
+    Crafting => "Crafting",
+    Alchemy => "Alchemy",
+    Enchanting => "Enchanting",
+});
+
+impl_sql_enum!(RecipeMode {
+    Base => "Base",
+    Plus => "Plus",
+});
+
+/// DTO for creating or updating an item from the game files.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewItem {
+    /// Slug of the internal name, e.g. `swallow-2`.
+    pub id: String,
+    /// The game's internal name, as saves spell it.
+    pub internal_name: String,
+    pub name_key: String,
+    pub category: String,
+    /// Rarity, 1 (common) to 5 (set).
+    pub quality: u8,
+    pub expansion: Option<Expansion>,
+    pub in_base: bool,
+    pub in_plus: bool,
+}
+
+/// An item with its name in one language.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Item {
+    pub id: String,
+    pub internal_name: String,
+    /// Name in the requested language, falling back to English and then the internal name.
+    pub name: String,
+    /// English name, for search in every language.
+    pub english_name: String,
+    pub category: String,
+    pub quality: u8,
+    pub expansion: Option<Expansion>,
+    pub has_image: bool,
+}
+
+/// One ingredient line of a recipe.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Ingredient {
+    pub item_id: String,
+    pub qty: u32,
+}
+
+/// DTO for storing a recipe from the game files.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewRecipe {
+    pub mode: RecipeMode,
+    pub product_id: String,
+    pub kind: RecipeKind,
+    pub level: Option<String>,
+    pub craftsman: Option<String>,
+    pub yield_qty: u32,
+    pub expansion: Option<Expansion>,
+    /// The primary ingredient set first, then alternatives.
+    pub variants: Vec<Vec<Ingredient>>,
+}
+
+/// A recipe, identified by its product.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Recipe {
+    pub product_id: String,
+    pub kind: RecipeKind,
+    /// Crafting: `Journeyman`, `Master`, `GrandMaster`, `ArchMaster`; enchanting: `1`-`3`.
+    pub level: Option<String>,
+    /// Crafting: `Smith`, `Armorer`, `Crafter`.
+    pub craftsman: Option<String>,
+    pub yield_qty: u32,
+    pub expansion: Option<Expansion>,
+    /// The primary ingredient set first, then alternatives; never empty.
+    pub variants: Vec<Vec<Ingredient>>,
+}
+
+impl Recipe {
+    /// The ingredients of `variant`, or of the primary set if there is no such variant.
+    pub fn ingredients(&self, variant: usize) -> &[Ingredient] {
+        self.variants.get(variant).or(self.variants.first()).map_or(&[], Vec::as_slice)
+    }
+}
+
+/// A craft planned in a playthrough.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueueEntry {
+    /// The product's item id (recipes are identified by their product).
+    pub item_id: String,
+    /// How many times to craft it.
+    pub qty: u32,
+    /// Which ingredient set to use (0 = primary).
+    pub variant: usize,
+}
+
+/// A stored item picture.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ItemImage {
+    pub image: Vec<u8>,
+    pub content_type: String,
+    pub wiki_file: String,
+    pub sha1: String,
 }

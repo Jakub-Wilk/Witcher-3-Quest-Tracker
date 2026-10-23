@@ -6,7 +6,7 @@ use crate::models::{HeadSave, NewPlaythrough, Playthrough, PlaythroughUpdate, Sa
 
 const COLUMNS: &str = "id, name, is_new_game_plus, notes, lineage_root,
     game_playthrough_id, started_at, head_save_key, head_save_file, head_saved_at, created_at,
-    updated_at";
+    updated_at, inventory_save_key";
 
 /// Inserts a new playthrough and returns its id.
 pub fn insert(conn: &Connection, p: &NewPlaythrough) -> Result<i64> {
@@ -161,6 +161,7 @@ fn map_row(row: &rusqlite::Row) -> rusqlite::Result<Playthrough> {
             }),
             None => None,
         },
+        inventory_save_key: row.get(12)?,
         created_at: parse_timestamp(&created_at, "created_at")?,
         updated_at: parse_timestamp(&updated_at, "updated_at")?,
     })
